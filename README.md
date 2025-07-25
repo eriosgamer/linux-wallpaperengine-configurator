@@ -24,7 +24,10 @@ Requires the Official Wallpaper Engine installed on Steam and wallpapers downloa
   - `requests` for network operations
   - `tkinter` for monitor identification popups
 - Linux Wallpaper Engine installed and available in the PATH (`linux-wallpaperengine`)
+  - Can be installed from the [official repository](https://github.com/Almamu/linux-wallpaperengine)
+  - Or via the package manager (e.g., `apt`, `dnf`, `pacman`) if available.
 - `xrandr`, `wlr-randr`, or `swaymsg` for screen detection
+  
 - Steam and wallpapers downloaded from Official Wallpaper Engine Workshop
 
 All dependencies are installed automatically when running the script.  
