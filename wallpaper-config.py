@@ -15,6 +15,11 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 def check_and_install_dependencies():
     missing_packages = []
     try:
+        import tkinter
+    except ImportError:
+        print("tkinter is not installed. Install it with: sudo apt install python3-tk")
+        missing_packages.append("tkinter")
+    try:
         import psutil
     except ImportError:
         print("psutil is not installed. Install it with: pip install --user psutil")
@@ -76,14 +81,12 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QTextEdit,
     QMessageBox,
-    QScrollArea,
     QGroupBox,
-    QComboBox,
     QDialog,  # Added QDialog import
 )
-from PySide6.QtGui import QIcon, QPixmap, QFont, QColor
-from PySide6.QtCore import Qt, QTimer, QSize
-from PIL import Image, ImageTk
+from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtCore import Qt, QTimer
+from PIL import Image
 import psutil
 from typing import Optional, Dict
 
@@ -98,7 +101,6 @@ class WallpaperConfigQt(QMainWindow):
         from PySide6.QtGui import QIcon
         if icon_base64:
             import base64
-            from io import BytesIO
 
             icon_data = base64.b64decode(icon_base64)
             icon_image = QPixmap()
@@ -126,9 +128,6 @@ class WallpaperConfigQt(QMainWindow):
         self.setup_ui()
         self.load_wallpapers()
         self.ensure_required_files()
-        # Remove this line from here:
-        # self.load_current_config()
-        # Instead, call it at the end of load_wallpapers
 
     def load_wallpapers(self):
         """

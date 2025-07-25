@@ -11,25 +11,31 @@ Requires the Official Wallpaper Engine installed on Steam and wallpapers downloa
 - Autostart support via `.desktop` file in `~/.config/autostart/`.
 - Preview and details for each wallpaper.
 - Logs accessible from the interface.
-- All interface texts are in English.
-- Automatic installation of all dependencies, including `requests`.
+- **Modern Qt interface using PySide6.**
+- Uses Tkinter only for monitor identification popups.
 
 ## Requirements
 
 - Python 3
-- Dependencies: `psutil`, `tkinter`, `Pillow`, `requests` (auto-installed)
+- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`, `tkinter` (auto-installed)
+  - `psutil` for system monitoring
+  - `PySide6` for the graphical interface
+  - `Pillow` for image handling
+  - `requests` for network operations
+  - `tkinter` for monitor identification popups
 - Linux Wallpaper Engine installed and available in the PATH (`linux-wallpaperengine`)
 - `xrandr`, `wlr-randr`, or `swaymsg` for screen detection
 - Steam and wallpapers downloaded from Official Wallpaper Engine Workshop
 
-All dependencies are installed automatically when running the script.
+All dependencies are installed automatically when running the script.  
+If a dependency is missing, the script will prompt you with the exact `pip install` command.
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/eriosgamer/linux-wallpaperengine-GUI.git
-   cd linux-wallpaperengine-GUI
+   git clone https://github.com/eriosgamer/linux-wallpaperengine-configurator.git
+   cd linux-wallpaperengine-configurator
    ```
 2. Run the configurator:
    ```bash
@@ -38,11 +44,12 @@ All dependencies are installed automatically when running the script.
 
 ## Autostart
 
-The application creates a `.desktop` file in `~/.config/autostart/` to automatically start the script when a graphical session begins.
+The application creates a `.desktop` file in `~/.config/autostart/` to automatically start the script when a graphical session begins.  
+Autostart can be enabled or disabled from the configuration menu in the interface.
 
 **Note:**  
 This method works on most Linux desktop environments based on Freedesktop/xdg (GNOME, KDE, XFCE, Cinnamon, MATE, LXDE, etc).  
-It may not work on minimalistic window managers or non-graphical sessions.
+It may not work on minimalistic window managers or non-graphical sessions.  
 RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not display.
 
 ## Screen Compatibility
@@ -52,9 +59,10 @@ RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not 
 
 ## Usage
 
-1. Select wallpapers for each screen using the graphical interface.
+1. Select wallpapers for each screen using the graphical interface (Qt).
 2. Apply changes; the script and configuration are updated automatically.
 3. Optionally, enable/disable autostart from the interface.
+4. Use the "Identify Monitors" button to show a popup on each screen (requires Tkinter).
 
 ## Logs and Support
 
