@@ -995,7 +995,9 @@ Categories=Graphics;Settings;
 
     def stop_wallpaper_engine(self):
         """Stop the wallpaper engine process"""
+        import os
         stopped_processes = []
+        current_pid = os.getpid()  # PID del proceso actual (python)
         try:
             for proc in psutil.process_iter(["pid", "name", "cmdline"]):
                 try:
@@ -1024,7 +1026,8 @@ Categories=Graphics;Settings;
                         if "start-wallpaperengine.sh" in cmdline_str:
                             process_found = True
 
-                    if process_found:
+                    # Evitar matar el proceso actual (python)
+                    if process_found and proc.info["pid"] != current_pid:
                         print(
                             f"Stopping process: {proc.info['name']} (PID: {proc.info['pid']})"
                         )
