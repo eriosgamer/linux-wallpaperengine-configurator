@@ -1562,6 +1562,9 @@ sleep 5
                     return f"Error reading log: {e}"
 
             def refresh_log_content():
+                # Evitar acceso si el widget ya fue destruido
+                if not hasattr(text_edit, 'setPlainText') or text_edit is None:
+                    return
                 try:
                     content = read_last_lines(log_file)
                     text_edit.setPlainText(content)
@@ -1569,7 +1572,15 @@ sleep 5
                         from PySide6.QtGui import QTextCursor
                         text_edit.moveCursor(QTextCursor.MoveOperation.End)
                 except Exception as e:
-                    text_edit.setPlainText(f"Error reading log: {e}")
+                    # Evitar crash si el widget ya fue destruido
+                    if hasattr(text_edit, 'setPlainText') and text_edit is not None:
+                        try:
+                            text_edit.setPlainText(f"Error reading log: {e}")
+                        except RuntimeError:
+                            pass
+                # Si el diálogo ya fue cerrado, no continuar refrescando
+                if not log_window.isVisible():
+                    return
                 # If auto-refresh is active, call again after 2 seconds
                 if auto_refresh_check.isChecked():
                     QTimer.singleShot(2000, refresh_log_content)
