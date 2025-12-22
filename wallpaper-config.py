@@ -15,11 +15,6 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 def check_and_install_dependencies():
     missing_packages = []
     try:
-        import tkinter
-    except ImportError:
-        print("tkinter is not installed. Install it with: sudo apt install python3-tk")
-        missing_packages.append("tkinter")
-    try:
         import psutil
     except ImportError:
         print("psutil is not installed. Install it with: pip install --user psutil")
@@ -398,18 +393,17 @@ class WallpaperConfigQt(QMainWindow):
 
         # Show info if any file was created
         if files_created:
-            import tkinter.messagebox as msgbox
-
             files_list = "\n• ".join(files_created)
-
-            def show_info():
-                msgbox.showinfo(
+            # Show an informational dialog using Qt after the event loop starts
+            QTimer.singleShot(
+                0,
+                lambda: QMessageBox.information(
+                    self,
                     "Initial Setup",
                     f"The following files have been created:\n\n• {files_list}\n\n"
-                    f"Linux Wallpaper Engine script is ready."
-                )
-
-            threading.Thread(target=show_info, daemon=True).start()
+                    f"Linux Wallpaper Engine script is ready.",
+                ),
+            )
 
     def create_wallpaper_script(self):
         """Create the wallpaper engine script dynamically for assigned screens"""
@@ -1376,8 +1370,6 @@ sleep 5
         - The popup should appear centered on each monitor, not in the corner.
         - They should not overlap on the same monitor.
         """
-        import threading
-        import tkinter as tk
 
         def get_monitor_geometries():
             """
@@ -1402,57 +1394,45 @@ sleep 5
                 pass
             return geometries
 
-        def show_popup(screen_name, number, geom):
-            x, y, w, h = geom
-            popup = tk.Toplevel(root)
-            popup.overrideredirect(True)
-            popup.attributes("-topmost", True)
-            # Transparency (only works on some systems)
-            try:
-                popup.attributes("-alpha", 0.7)
-            except Exception:
-                pass
-            # Dark background and large text
-            frame = tk.Frame(popup, bg="#222", bd=3, relief="solid")
-            frame.pack(fill="both", expand=True)
-            label = tk.Label(
-                frame,
-                text=f"{number+1}\n{screen_name}",
-                font=("Arial", 36, "bold"),
-                fg="white",
-                bg="#222",
-            )
-            label.pack(padx=30, pady=30)
-            # Centered on the monitor
-            popup_w, popup_h = 300, 150
-            pos_x = x + (w - popup_w) // 2
-            pos_y = y + (h - popup_h) // 2
-            popup.geometry(f"{popup_w}x{popup_h}+{pos_x}+{pos_y}")
-            popup.update_idletasks()
-            # Close the popup after 2 seconds
-            popup.after(2000, popup.destroy)
 
-        # Get real geometry of each monitor
         geometries = get_monitor_geometries()
-        used = set()
 
-        # Create a temporary Tk root window (hidden)
-        root = tk.Tk()
-        root.withdraw()  # Hide the main window
+        popup_width, popup_height = 300, 150
 
         for idx, screen in enumerate(self.detected_screens):
             geom = geometries.get(screen)
-            if geom:
-                used.add(screen)
-                print(f"Showing popup for {screen} at {geom}")
-                # Use after to ensure the popup is created in the main Tkinter thread
-                root.after(0, show_popup, screen, idx, geom)
-            else:
+            if not geom:
                 print(f"Warning: No geometry found for {screen}, popup not shown.")
+                continue
 
-        # Run the Tkinter event loop for a short time to show popups
-        root.after(2200, root.destroy)  # Destroy after popups close
-        root.mainloop()
+            x, y, w, h = geom
+            print(f"Showing popup for {screen} at {geom}")
+
+            popup = QDialog(self)
+            popup.setWindowFlags(
+                popup.windowFlags()
+                | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowStaysOnTopHint
+                | Qt.WindowType.Tool
+            )
+            popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+            popup.setFixedSize(popup_width, popup_height)
+            popup.move(x + (w - popup_width) // 2, y + (h - popup_height) // 2)
+
+            label = QLabel(f"{idx+1}\n{screen}")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet(
+                "background:#222;color:white;font-size:36px;padding:30px;border-radius:6px;"
+            )
+
+            layout = QVBoxLayout(popup)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(label)
+
+            popup.show()
+            # Close after 2 seconds
+            QTimer.singleShot(2000, popup.close)
 
     def manage_autostart(self):
         """

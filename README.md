@@ -12,17 +12,16 @@ Requires the Official Wallpaper Engine installed on Steam and wallpapers downloa
 - Preview and details for each wallpaper.
 - Logs accessible from the interface.
 - **Modern Qt interface using PySide6.**
-- Uses Tkinter only for monitor identification popups.
+- Uses PySide6 for the graphical interface (no Tkinter required).
 
 ## Requirements
 
 - Python 3
-- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`, `tkinter` (auto-installed)
+- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`
   - `psutil` for system monitoring
   - `PySide6` for the graphical interface
   - `Pillow` for image handling
   - `requests` for network operations
-  - `tkinter` for monitor identification popups
 - Linux Wallpaper Engine installed and available in the PATH (`linux-wallpaperengine`)
   - Can be installed from the [official repository](https://github.com/Almamu/linux-wallpaperengine)
   - Or via the package manager (e.g., `apt`, `dnf`, `pacman`) if available.
@@ -65,7 +64,7 @@ RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not 
 1. Select wallpapers for each screen using the graphical interface (Qt).
 2. Apply changes; the script and configuration are updated automatically.
 3. Optionally, enable/disable autostart from the interface.
-4. Use the "Identify Monitors" button to show a popup on each screen (requires Tkinter).
+4. Use the "Identify Monitors" button to show a popup on each screen.
 
 ## Logs and Support
 
