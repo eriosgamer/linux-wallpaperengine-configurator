@@ -64,7 +64,15 @@ RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not 
 1. Select wallpapers for each screen using the graphical interface (Qt).
 2. Apply changes; the script and configuration are updated automatically.
 3. Optionally, enable/disable autostart from the interface.
-4. Use the "Identify Monitors" button to show a popup on each screen.
+4. Use the "Identify Monitors" button to help locate displays.
+
+   - On X11: the app will attempt to show small overlays on each screen to identify them.
+   - On Wayland (Hyprland, Sway, etc.): compositors often restrict windows to the output that contains the application, so the tool opens a **Monitor Map** simulation showing each monitor's position and size instead.
+   - For diagnostics and higher visibility, set the environment variable `WALLPAPER_OVERLAY_DEBUG=1` before launching the app, for example:
+     ```bash
+     WALLPAPER_OVERLAY_DEBUG=1 python3 wallpaper-config.py
+     ```
+   - Note: per-screen "Identify" buttons were removed from the UI to avoid confusion; use the Monitor Map or move the app to the target monitor and then use "Identify Monitors" to display overlays on that output when possible.
 
 ## Logs and Support
 

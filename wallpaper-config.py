@@ -79,8 +79,8 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QDialog,  # Added QDialog import
 )
-from PySide6.QtGui import QPixmap, QFont
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap, QFont, QPainter, QColor, QPen, QBrush, QLinearGradient
+from PySide6.QtCore import Qt, QTimer, QRectF
 from PIL import Image
 import psutil
 from typing import Optional, Dict
@@ -119,6 +119,12 @@ class WallpaperConfigQt(QMainWindow):
         self.current_selection: Optional[str] = None
         for screen in self.detected_screens:
             self.selected_wallpapers[screen] = None
+        # Create persistent per-screen overlays (used by Identify Monitors)
+        # These are created once and then shown/hidden to improve compatibility with Wayland compositors
+        try:
+            self.create_overlays()
+        except Exception as e:
+            print(f"Warning: could not create overlays at init: {e}")
         # Main UI
         self.setup_ui()
         self.load_wallpapers()
@@ -1362,77 +1368,484 @@ sleep 5
                 f"Error reading script: {e}",
             )
             
-    def identify_monitors(self):
+    def create_overlays(self):
+        """Create persistent per-screen overlay widgets and keep them hidden.
+        These persistent windows are more likely to be accepted by Wayland compositors
+        than ephemeral transient popups created on demand.
         """
-        Shows a semi-transparent popup on each detected screen with its name and number.
-        Fixes:
-        - The popup should not have a title bar or icon (real floating window).
-        - The popup should appear centered on each monitor, not in the corner.
-        - They should not overlap on the same monitor.
-        """
+        from PySide6.QtGui import QGuiApplication
 
-        def get_monitor_geometries():
-            """
-            Returns a dict {screen_name: (x, y, w, h)} using xrandr.
-            """
-            geometries = {}
-            try:
-                result = subprocess.run(
-                    ["xrandr", "--query"], capture_output=True, text=True
-                )
-                for line in result.stdout.splitlines():
-                    if " connected" in line:
-                        parts = line.split()
-                        screen_name = parts[0]
-                        import re
+        self._screen_overlays = {}
+        popup_w, popup_h = 300, 150
 
-                        m = re.search(r"(\d+)x(\d+)\+(\d+)\+(\d+)", line)
-                        if m:
-                            w, h, x, y = map(int, m.groups())
-                            geometries[screen_name] = (x, y, w, h)
-            except Exception:
-                pass
-            return geometries
+        # Gather xrandr geometries as a primary source
+        geometries = {}
+        try:
+            result = subprocess.run(["xrandr", "--query"], capture_output=True, text=True)
+            for line in result.stdout.splitlines():
+                if " connected" in line:
+                    parts = line.split()
+                    screen_name = parts[0]
+                    import re
 
+                    m = re.search(r"(\d+)x(\d+)\+(\d+)\+(\d+)", line)
+                    if m:
+                        w, h, x, y = map(int, m.groups())
+                        geometries[screen_name] = (x, y, w, h)
+        except Exception:
+            pass
 
-        geometries = get_monitor_geometries()
-
-        popup_width, popup_height = 300, 150
+        screens = QGuiApplication.screens()
 
         for idx, screen in enumerate(self.detected_screens):
+            # Prefer xrandr geometry, fallback to QScreen lookup
             geom = geometries.get(screen)
-            if not geom:
-                print(f"Warning: No geometry found for {screen}, popup not shown.")
-                continue
+            if geom is None:
+                found_qs = None
+                for s in screens:
+                    try:
+                        if s.name() == screen:
+                            found_qs = s
+                            break
+                    except Exception:
+                        continue
+                if found_qs:
+                    sgeom = found_qs.geometry()
+                    x, y, w, h = sgeom.x(), sgeom.y(), sgeom.width(), sgeom.height()
+                else:
+                    print(f"Warning: Could not determine geometry for overlay {screen}")
+                    continue
+            else:
+                x, y, w, h = geom
 
-            x, y, w, h = geom
-            print(f"Showing popup for {screen} at {geom}")
-
-            popup = QDialog(self)
-            popup.setWindowFlags(
-                popup.windowFlags()
+            overlay = QDialog(None)
+            flags = (
+                Qt.WindowType.Window
                 | Qt.WindowType.FramelessWindowHint
                 | Qt.WindowType.WindowStaysOnTopHint
                 | Qt.WindowType.Tool
             )
-            popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            overlay.setWindowFlags(flags)
+            # Use an opaque background (more compatible) but keep style consistent
+            try:
+                overlay.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+                overlay.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+            except Exception:
+                pass
 
-            popup.setFixedSize(popup_width, popup_height)
-            popup.move(x + (w - popup_width) // 2, y + (h - popup_height) // 2)
+            overlay.setModal(False)
+            overlay.setFixedSize(popup_w, popup_h)
+            target_x = x + (w - popup_w) // 2
+            target_y = y + (h - popup_h) // 2
+            overlay.move(target_x, target_y)
 
             label = QLabel(f"{idx+1}\n{screen}")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet(
-                "background:#222;color:white;font-size:36px;padding:30px;border-radius:6px;"
-            )
+            # If debug env var is set, use a highly visible opaque style for diagnostics
+            if os.getenv("WALLPAPER_OVERLAY_DEBUG"):
+                label.setStyleSheet("background:#ff1744;color:white;font-size:36px;padding:30px;border-radius:6px;box-shadow:0 0 0 5px rgba(255,23,68,0.8);")
+                try:
+                    overlay.setStyleSheet("background:rgba(255,23,68,0.95);border:5px solid #ff1744;")
+                except Exception:
+                    pass
+            else:
+                label.setStyleSheet("background:#222;color:white;font-size:36px;padding:30px;border-radius:6px;")
 
-            layout = QVBoxLayout(popup)
+            layout = QVBoxLayout(overlay)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(label)
 
-            popup.show()
-            # Close after 2 seconds
-            QTimer.singleShot(2000, popup.close)
+            # Attempt to associate overlay with QScreen (best-effort)
+            try:
+                # Request a native window handle so we can call setScreen reliably
+                try:
+                    overlay.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+                except Exception:
+                    pass
+
+                assigned_qscreen = None
+                # Ensure a windowHandle exists by briefly showing the window
+                try:
+                    overlay.show()
+                    QApplication.processEvents()
+                except Exception:
+                    pass
+
+                if overlay.windowHandle():
+                    for s in screens:
+                        sgeom = s.geometry()
+                        if (
+                            target_x >= sgeom.x()
+                            and target_x < sgeom.x() + sgeom.width()
+                            and target_y >= sgeom.y()
+                            and target_y < sgeom.y() + sgeom.height()
+                        ):
+                            try:
+                                overlay.windowHandle().setScreen(s)
+                                assigned_qscreen = s
+                                try:
+                                    name = s.name()
+                                except Exception:
+                                    name = str(sgeom)
+                                print(f"Overlay for {screen}: assigned to QScreen: {name} (geom {sgeom})")
+                            except Exception as e:
+                                print(f"Overlay setScreen error for {screen}: {e}")
+                            break
+
+                # Hide after assignment; will show later via show_overlays
+                try:
+                    overlay.hide()
+                    QApplication.processEvents()
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"Overlay windowHandle/setup error for {screen}: {e}")
+
+            # Remember the assigned qscreen for later reuse when showing
+            overlay._assigned_qscreen = assigned_qscreen
+            self._screen_overlays[screen] = overlay
+
+    def show_overlays(self, duration_ms=2000):
+        """Show the persistent overlays for duration_ms milliseconds and hide them."""
+        if not hasattr(self, "_screen_overlays") or not self._screen_overlays:
+            # Lazy-create if needed
+            try:
+                self.create_overlays()
+            except Exception as e:
+                print(f"Error creating overlays on demand: {e}")
+                return
+
+        for screen, overlay in list(self._screen_overlays.items()):
+            try:
+                # Re-assert assigned screen (some compositors only honor setScreen when mapping)
+                try:
+                    assigned = getattr(overlay, '_assigned_qscreen', None)
+                    if assigned and overlay.windowHandle():
+                        try:
+                            overlay.windowHandle().setScreen(assigned)
+                        except Exception as e:
+                            print(f"Warning: could not setScreen on show for {screen}: {e}")
+                except Exception:
+                    pass
+
+                # Show overlay and force a short repaint; then log diagnostic info
+                overlay.show()
+                overlay.raise_()
+                QApplication.processEvents()
+                try:
+                    handle = overlay.windowHandle()
+                    mapped_screen = None
+                    if handle and handle.screen():
+                        try:
+                            mapped_screen = handle.screen().name()
+                        except Exception:
+                            mapped_screen = str(handle.screen().geometry())
+                    print(f"Shown overlay for {screen}: visible={overlay.isVisible()}, mapped_screen={mapped_screen}, geom={overlay.geometry()}")
+                except Exception as e:
+                    print(f"Overlay diagnostic error for {screen}: {e}")
+
+                # schedule hide
+                QTimer.singleShot(duration_ms, overlay.hide)
+            except Exception as e:
+                print(f"Error showing overlay for {screen}: {e}")
+
+    def is_wayland(self):
+        """Return True if running under Wayland (likely compositor restrictions apply)."""
+        return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+    def get_monitor_geometries(self):
+        """Return a dict {screen_name: (x, y, w, h)} by probing available tools (xrandr/wlr-randr/swaymsg) or QGuiApplication as fallback."""
+        geometries = {}
+        # Try xrandr first
+        try:
+            r = subprocess.run(["xrandr", "--query"], capture_output=True, text=True)
+            for line in r.stdout.splitlines():
+                if " connected" in line:
+                    parts = line.split()
+                    name = parts[0]
+                    import re
+
+                    m = re.search(r"(\d+)x(\d+)\+(\d+)\+(\d+)", line)
+                    if m:
+                        w, h, x, y = map(int, m.groups())
+                        geometries[name] = (x, y, w, h)
+            if geometries:
+                print(f"get_monitor_geometries: using xrandr -> {geometries}")
+                return geometries
+        except Exception:
+            pass
+
+        # Try wlr-randr
+        try:
+            r = subprocess.run(["wlr-randr"], capture_output=True, text=True)
+            for line in r.stdout.splitlines():
+                if " connected" in line or line.startswith("Output "):
+                    parts = line.split()
+                    # wlr-randr has different format; try to extract name and resolution if present
+                    name = parts[1] if len(parts) > 1 else parts[0]
+                    import re
+
+                    m = re.search(r"(\d+)x(\d+).*(\+\d+\+\d+)", line)
+                    if m:
+                        w = int(m.group(1)); h = int(m.group(2))
+                        pos = re.search(r"(\+\d+\+\d+)", line)
+                        if pos:
+                            xy = pos.group(1).lstrip('+').split('+')
+                            x = int(xy[0]); y = int(xy[1])
+                        else:
+                            x = 0; y = 0
+                        geometries[name] = (x, y, w, h)
+            if geometries:
+                print(f"get_monitor_geometries: using wlr-randr -> {geometries}")
+                return geometries
+        except Exception:
+            pass
+
+        # Try swaymsg
+        try:
+            r = subprocess.run(["swaymsg", "-t", "get_outputs"], capture_output=True, text=True)
+            import json
+
+            outputs = json.loads(r.stdout)
+            for out in outputs:
+                if out.get("active"):
+                    name = out.get("name")
+                    x = int(out.get("rect", {}).get("x", 0))
+                    y = int(out.get("rect", {}).get("y", 0))
+                    w = int(out.get("rect", {}).get("width", 0))
+                    h = int(out.get("rect", {}).get("height", 0))
+                    geometries[name] = (x, y, w, h)
+            if geometries:
+                print(f"get_monitor_geometries: using swaymsg -> {geometries}")
+                return geometries
+        except Exception:
+            pass
+
+        # Fallback: use QGuiApplication.screens()
+        try:
+            from PySide6.QtGui import QGuiApplication
+
+            screens = QGuiApplication.screens()
+            for s in screens:
+                try:
+                    name = s.name()
+                except Exception:
+                    name = str(s.geometry())
+                g = s.geometry()
+                geometries[name] = (g.x(), g.y(), g.width(), g.height())
+            if geometries:
+                print(f"get_monitor_geometries: using QGuiApplication -> {geometries}")
+                return geometries
+        except Exception:
+            pass
+
+        print("get_monitor_geometries: no geometries found")
+        return geometries
+
+    def show_monitor_map(self, duration_ms=3000):
+        """Show a dialog that draws a scaled simulation of all monitors based on their coordinates."""
+        # Local GUI imports required for drawing
+        from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont
+        from PySide6.QtWidgets import QPushButton, QWidget
+
+        geoms = self.get_monitor_geometries()
+        if not geoms:
+            print("show_monitor_map: no geometries to show")
+            QMessageBox.information(self, "Monitor Map", "No monitor geometry information available.")
+            return
+
+        # Create the dialog and widget
+        class MonitorMapWidget(QWidget):
+            def __init__(self, geometries, parent=None):
+                super().__init__(parent)
+                self.geometries = geometries  # dict name: (x,y,w,h)
+                # compute bounds
+                xs = [x for (x, y, w, h) in geometries.values()] + [x + w for (x, y, w, h) in geometries.values()]
+                ys = [y for (x, y, w, h) in geometries.values()] + [y + h for (x, y, w, h) in geometries.values()]
+                self.min_x = min(xs)
+                self.min_y = min(ys)
+                self.max_x = max(xs)
+                self.max_y = max(ys)
+                self.margin = 20
+
+            def paintEvent(self, event):
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                rect = self.rect()
+
+                # Background gradient
+                grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
+                grad.setColorAt(0.0, QColor(55,55,60))
+                grad.setColorAt(1.0, QColor(35,35,40))
+                painter.fillRect(rect, grad)
+
+                total_w = self.max_x - self.min_x
+                total_h = self.max_y - self.min_y
+                if total_w == 0 or total_h == 0:
+                    return
+                scale = min((rect.width()-2*self.margin)/total_w, (rect.height()-2*self.margin)/total_h)
+
+                # Pens and fonts
+                pen_border = QPen(QColor(200,200,200,180))
+                pen_border.setWidth(2)
+                painter.setFont(QFont('Sans', 10))
+
+                for idx, (name, (x, y, w, h)) in enumerate(self.geometries.items(), 1):
+                    sx = int((x - self.min_x) * scale) + self.margin
+                    sy = int((y - self.min_y) * scale) + self.margin
+                    sw = max(6, int(w * scale))
+                    sh = max(6, int(h * scale))
+
+                    # Shadow
+                    shadow_color = QColor(0, 0, 0, 100)
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(shadow_color))
+                    painter.drawRoundedRect(QRectF(sx+6, sy+6, sw, sh), 8, 8)
+
+                    # Monitor fill gradient
+                    mg = QLinearGradient(sx, sy, sx, sy+sh)
+                    if os.getenv('WALLPAPER_OVERLAY_DEBUG'):
+                        mg.setColorAt(0.0, QColor(255,95,95))
+                        mg.setColorAt(1.0, QColor(200,40,40))
+                    else:
+                        mg.setColorAt(0.0, QColor(60,60,65))
+                        mg.setColorAt(1.0, QColor(40,40,45))
+                    painter.setBrush(QBrush(mg))
+                    painter.setPen(Qt.NoPen)
+                    painter.drawRoundedRect(QRectF(sx, sy, sw, sh), 8, 8)
+
+                    # Border
+                    painter.setPen(pen_border)
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawRoundedRect(QRectF(sx, sy, sw, sh), 8, 8)
+
+                    # Label band
+                    band_h = min(28, max(18, sh//6))
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(QColor(0,0,0,140)))
+                    painter.drawRoundedRect(QRectF(sx+6, sy+6, sw-12, band_h), 6, 6)
+
+                    painter.setPen(QColor(235,235,235))
+                    painter.setFont(QFont('Sans', 10))
+                    painter.drawText(sx+12, sy + band_h - 6, f"{idx}  {name}")
+
+                    # Index badge
+                    badge_r = 18
+                    badge_x = sx + sw - badge_r - 10
+                    badge_y = sy + 10
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(QColor(220,80,80)))
+                    painter.drawEllipse(QRectF(badge_x, badge_y, badge_r, badge_r))
+                    painter.setPen(QColor(255,255,255))
+                    painter.setFont(QFont('Sans', 9, QFont.Weight.Bold))
+                    painter.drawText(badge_x+5, badge_y+13, str(idx))
+
+                # footer hint
+                painter.setPen(QColor(160,160,160))
+                painter.setFont(QFont('Sans', 9))
+                painter.drawText(rect.left()+10, rect.bottom()-10, "Simulation: positions and sizes are approximate")
+
+        # Build dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Monitor Map")
+        dlg.resize(900, 600)
+        layout = QVBoxLayout(dlg)
+        widget = MonitorMapWidget(geoms, dlg)
+        layout.addWidget(widget)
+        btn_layout = QHBoxLayout()
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dlg.accept)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_close)
+        layout.addLayout(btn_layout)
+
+        print(f"Showing monitor map with geometries: {geoms}")
+        # Show dialog until the user closes it with the Close button
+        dlg.show()
+
+    def identify_monitor(self, screen_name, duration_ms=2000):
+        """Show overlay only for a single screen and log diagnostics."""
+        print(f"identify_monitor: requested for {screen_name}")
+        # If overlays exist, show only that one
+        ov = None
+        if hasattr(self, "_screen_overlays"):
+            ov = self._screen_overlays.get(screen_name)
+        if ov:
+            try:
+                # Try re-asserting assigned screen
+                assigned = getattr(ov, '_assigned_qscreen', None)
+                if assigned and ov.windowHandle():
+                    try:
+                        ov.windowHandle().setScreen(assigned)
+                    except Exception as e:
+                        print(f"Warning: could not setScreen on single show for {screen_name}: {e}")
+                ov.show()
+                ov.raise_()
+                QApplication.processEvents()
+                try:
+                    handle = ov.windowHandle()
+                    mapped = None
+                    if handle and handle.screen():
+                        try:
+                            mapped = handle.screen().name()
+                        except Exception:
+                            mapped = str(handle.screen().geometry())
+                    print(f"Single overlay shown for {screen_name}: visible={ov.isVisible()}, mapped_screen={mapped}, geom={ov.geometry()}")
+                except Exception as e:
+                    print(f"Diagnostic error for single overlay {screen_name}: {e}")
+                QTimer.singleShot(duration_ms, ov.hide)
+                return
+            except Exception as e:
+                print(f"Error showing single overlay for {screen_name}: {e}")
+        # if no overlay exists or it failed, try fallback
+        print(f"identify_monitor: fallback for {screen_name}")
+        if self.is_wayland():
+            QMessageBox.information(
+                self,
+                "Identify Monitors",
+                "Wayland compositor detected. Overlays may be restricted to the screen containing the application.\nUse the 'Identify' button while the app is on the target monitor, or move the app to that monitor and retry.",
+            )
+        # Fallback minimal visible dialog
+        try:
+            tmp = QDialog(self)
+            tmp.setWindowTitle(f"{screen_name}")
+            tmp.setModal(False)
+            tmp_label = QLabel(screen_name)
+            tmp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            tmp_layout = QVBoxLayout(tmp)
+            tmp_layout.addWidget(tmp_label)
+            tmp.setFixedSize(300, 150)
+            tmp.show()
+            QTimer.singleShot(2000, tmp.close)
+        except Exception as e:
+            print(f"identify_monitor fallback dialog error: {e}")
+
+    def identify_monitors(self):
+        """Show overlay labels on each screen to identify them (persistent-overlay method)."""
+        # If Wayland, show a monitor map simulation (Wayland may restrict real overlays)
+        if self.is_wayland():
+            print("Wayland detected: showing monitor map simulation")
+            self.show_monitor_map(3000)
+            return
+
+        # Inform Wayland users about possible compositor restrictions
+        if self.is_wayland():
+            QMessageBox.information(
+                self,
+                "Identify Monitors",
+                "Wayland compositor detected: some compositors restrict showing windows on outputs other than the one containing the app.\nIf overlays don't appear on other monitors, move the app to that monitor or use the per-screen 'Identify' buttons.",
+            )
+        print("Showing persistent overlays for identify_monitors")
+        try:
+            self.show_overlays(2000)
+        except Exception as e:
+            print(f"Fallback: overlays failed with {e}, falling back to transient popups")
+            # If overlays fail, try the previous transient approach (best-effort)
+            try:
+                for idx, screen in enumerate(self.detected_screens):
+                    QMessageBox.information(self, "Screen", f"{idx+1} - {screen}")
+            except Exception as e2:
+                print(f"Fallback fallback failed: {e2}")
 
     def manage_autostart(self):
         """
