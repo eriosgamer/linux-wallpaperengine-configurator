@@ -4,7 +4,6 @@ import json
 import subprocess
 import sys
 import shutil
-import threading
 import re
 
 # Force UTF-8
@@ -25,6 +24,10 @@ def check_and_install_dependencies():
         print("Pillow is not installed. Install it with: pip install --user pillow")
         missing_packages.append("pillow")
     try:
+        import qdarktheme
+    except ImportError:
+        print("qdarktheme missing, Install it with pip install --user PyQtDarkTheme")
+    try:
         import requests
     except ImportError:
         print("requests is not installed. Install it with: pip install --user requests")
@@ -39,6 +42,7 @@ def check_and_install_dependencies():
     wallpaperengine_running = False
     try:
         import psutil
+
         for proc in psutil.process_iter(["name"]):
             if proc.info["name"] and "linux-wallpaperengine" in proc.info["name"]:
                 wallpaperengine_running = True
@@ -79,21 +83,25 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QDialog,  # Added QDialog import
 )
-from PySide6.QtGui import QPixmap, QFont, QPainter, QColor, QPen, QBrush, QLinearGradient
+from PySide6.QtGui import QPixmap, QFont, QLinearGradient, QImage
 from PySide6.QtCore import Qt, QTimer, QRectF
 from PIL import Image
 import psutil
 from typing import Optional, Dict
+import qdarktheme
 
 
 class WallpaperConfigQt(QMainWindow):
     def __init__(self):
+        self.screen_configs = {}
+        qdarktheme.setup_theme("dark")
         super().__init__()
         self.setWindowTitle("Linux-WallpaperEngine Configuration (Qt)")
         self.setGeometry(100, 100, 1200, 800)
         icon_base64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA7AAAAOwBeShxvQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAUmSURBVFiFvZZbbFRVFIa/fS4zZ9q5dtpOx7ZYKlWuJZZLEQPRQFAiRIygcjEkQIwRJBLlogkaolUTwxv1waARLEZACWKlQDSEYAxBimBahEIpAr0IbaedMtO5nuMDUGg7HdpS+ZPzcM7+915f1j577SVIrhzNYquMREJOhKTfw9svGfGoZBj6cKABQEniTbc73JWKImcWzCzB7h3fy6DHIwSaa4jHwncFiHR7BxCAa9gUgm3/cKbi3UC0s+UJ4Ccg0heA3enKrFy7bm3mvvL9BBMYop0+ag+tpCBPw25VQYAi6ciyRKrThCrHwRBEdQlFFqxa0sCP+y/imZqmtrcqX/x9wef3d0SKRIK1LS63p3L58mUjN76/URQWFpFRvAmzLaubqfGvMl4oOsmHGyYkSWLfevuD38Nby85skHp8V1xuz+HOYMeoqupz4uOSj2hr82G2ebqZQv56gk3HGDfKMajgAOPHuM3WFPWxnlswLhDSx+U/uZ7Lego1h2vIGv8qN3cRMHRu1Gyjte4ImhQjzZk7aACXw4yqSJk9MyCZLO6QO/8pXLmT8RYuIb1gbtegv+5nnNIVSj/fQiQSIxyKDRogEo4jSVKfP2FCXaveyeZvvmbBSwvRrBn460NYWgd3Ov0NnYDR3G+AeCSAQOdi7UVcuVPRPBPZuncLUwozyXJbELd2KdWiYlK7JzYciRO8lS1dh8bmIF/urYk1XQ+W9xtAyCb8/nayc3IJ+Wp5aNKbtIWuMOedCjoDN7p8wWAIwzB6zTeZVFRVoaWl3chwa9f0OJuBg/0GkGQVz/ApnKis5Llnp7Nnz1KsrmyQvaj2Oz6HHYSkoNjzyRj9MorZ1m2d9p1L2hr+vTINOA/JK2EvpY9/ndLSNSxe9Apl27eSarUiRO9SEo1GqThwgO071lIwuxQhyX2uOSAAU2oG+c9sofzot3y3ayUdbc0JfYahU/LpJ+Rmuwk012DNHDU0AACq5iSr6I0+xwPN57l24RB7du8GI07LpaNIipmUtPyE/p514L4U9NVxtWINk64fx1vfREFbOxN8lVzc/xYhf0PCOQPOQDIJScUAbsSiyIEoQggMBAYSQkocakgzYHHkkDFtPa3RMPO8eczzPszVUIjcp97DbM38/wEAZEXDZdJ42pvFDK8Xm2ZFUix9+occ4KYEGIlu+gcGAEL0roYPFCBBNX5QAALDMLoqpEFykiE9hgAprjxOdfgoOVsFQnDW72NkksZlyAFMqenkzS3lt6snQAhGTJyMqjnvDSDL6lLFnLI66Kt1/rlrUZchfdhEHp26jGO7VqPrA++AGqu+R9UcZIyYiXfs/MQAmsWxw+EZPqd49mq7LS27m0FLdWDSbHhXfYUe7y+AwS9lG7hef4ZhxSvQbFk0nN4FonfCFWCGxZ4+Z96q7XYpybVpdWb1OdZTtacP0txwDtewYtJHTAcgu2ghDad+6OWVVHPK84XTFtuSBR+o6qqO4B07n5C/kdS0HKzpeeiRG2hWTy+vIiQlTVa1/pWtfkqPRQj6agn5G/lj2xIszhyCrZcYM3szp/a8pgBdPZwS6fSXVx/ft8D6yCzTUAFYsx+n6epORkxfB4CqObBljibQcgHDiLUBjbe9MlBt6LEFvmuXPCZ3ATGhEY7p9/WY0/K5fvYAkiyTUTALiyOH9vqTnP11kz8e7ngRuHwb4HbqzRa757NYJLTc0CNmkPpZSO+SQMCdBtHQYyIeDQkASVbDkmI5Ewv7VwAn7572H1Aa8kcV7uKbAAAAAElFTkSuQmCC"
         # Converts the base64 string to a QIcon
         from PySide6.QtGui import QIcon
+
         if icon_base64:
             import base64
 
@@ -145,15 +153,23 @@ class WallpaperConfigQt(QMainWindow):
         # Optionally update the UI list if needed
         if hasattr(self, "wallpaper_list"):
             self.wallpaper_list.clear()
-            sorted_wallpapers = sorted(self.wallpapers.items(), key=lambda x: x[1]["title"].lower())
+            sorted_wallpapers = sorted(
+                self.wallpapers.items(), key=lambda x: x[1]["title"].lower()
+            )
             for wallpaper_id, info in sorted_wallpapers:
                 # Detect CJK characters in the title
                 def highlight_cjk(text):
                     # Regex for CJK Unified Ideographs
                     def repl(m):
                         return f'<span style="color:blue;">{m.group(0)}</span>'
-                    return re.sub(r'[\u4e00-\u9fff\u3040-\u30ff\u3400-\u4dbf\uac00-\ud7af]+', repl, text)
-                title_html = highlight_cjk(info['title'])
+
+                    return re.sub(
+                        r"[\u4e00-\u9fff\u3040-\u30ff\u3400-\u4dbf\uac00-\ud7af]+",
+                        repl,
+                        text,
+                    )
+
+                title_html = highlight_cjk(info["title"])
                 display_text = f"{title_html} (ID: {wallpaper_id})"
                 item = QListWidgetItem()
                 if not info.get("supported", True):
@@ -411,6 +427,17 @@ class WallpaperConfigQt(QMainWindow):
                 ),
             )
 
+    def clear_log(self):
+        log_file = "/tmp/wallpaper-engine.log"
+        try:
+            if not os.path.exists(log_file):
+                QMessageBox.information(self, "Logs", "No log file found yet.")
+                return
+            open(log_file, "w").close()
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error reading log: {e}")
+
     def create_wallpaper_script(self):
         """Create the wallpaper engine script dynamically for assigned screens"""
         # Only include screens with assigned wallpapers
@@ -459,13 +486,41 @@ class WallpaperConfigQt(QMainWindow):
         script_content += 'export PULSE_RUNTIME_PATH="/run/user/$(id -u)/pulse"\n\n'
         script_content += 'echo "$(date): Running with wallpapers:" >> "$LOG_FILE"\n'
         for idx, screen in enumerate(self.detected_screens, 1):
+            
             script_content += f'echo "  {screen}: $WALLPAPER{idx}" >> "$LOG_FILE"\n'
 
         # Build the linux-wallpaperengine command dynamically
-        script_content += "\n# Run wallpaper engine\nlinux-wallpaperengine"
+        script_content += "\n# Run wallpaper engine\nlinux-wallpaperengine\\\n"
         for idx, (screen, _) in enumerate(assigned, 1):
-            script_content += f' \\\n  --scaling fill \\\n  --screen-root {screen} \\\n  --bg "$WALLPAPER{idx}"'
-        script_content += ' \\\n  --silent \\\n 2>&1 | tee -a "$LOG_FILE"\n'
+            cs = self.screen_configs.get(screen, {"scaling": "fill"})
+            script_content += f" --scaling {cs['scaling']} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{idx}\" \\\n"
+
+        c = self.screen_configs.get(self, {
+            "fps": 30, "volume": 15, "silent": True,
+            "noautomute": False, "no_audio_proc": False,
+            "mouse": True, "parallax": True, "fs_pause": True, "clamp": "border"
+        })
+
+        if c['silent']:
+            script_content += " --silent \\\n"
+        else:
+            script_content += f" --volume {c['volume']} \\\n"
+        
+        if c['noautomute']: script_content += " --noautomute \\\n"
+
+        if c['no_audio_proc']: script_content += " --no-audio-processing \\\n"
+
+        if not c['mouse']: script_content += " --disable-mouse \\\n"
+
+        if c['clamp']: script_content += f" --clamp {c['clamp']}"
+
+        if not c['parallax']: script_content += " --disable-parallax \\\n"
+
+        if not c['fs_pause']: script_content += " --no-fullscreen-pause \\\n"
+
+        script_content += f" --fps {c['fps']} \\\n"
+
+        script_content += '2>&1 | tee -a "$LOG_FILE"\n'
 
         try:
             with open(self.script_path, "w") as f:
@@ -537,8 +592,12 @@ Categories=Graphics;Settings;
                 self.unicode_font = "Arial"
                 print("Warning: No CJK font found. Using Arial as fallback.")
             else:
-                self.unicode_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
-                print("Warning: No CJK/Arial/Unifont font found. Using system default font.")
+                self.unicode_font = QFontDatabase.systemFont(
+                    QFontDatabase.SystemFont.GeneralFont
+                ).family()
+                print(
+                    "Warning: No CJK/Arial/Unifont font found. Using system default font."
+                )
 
         print(f"Using font: {self.unicode_font}")
 
@@ -614,11 +673,19 @@ Categories=Graphics;Settings;
                 lambda checked, s=screen: self.assign_and_apply(s)
             )
             assign_layout.addWidget(btn_assign, idx, 0)
+
             btn_unassign = QPushButton("Unassign")
             btn_unassign.clicked.connect(
                 lambda checked, s=screen: self.unassign_wallpaper(s)
             )
             assign_layout.addWidget(btn_unassign, idx, 1)
+
+            btn_config = QPushButton("Config")
+            btn_config.clicked.connect(
+                lambda checked, s=screen: self.config_wallpaper(s)
+            )
+            assign_layout.addWidget(btn_config, idx, 2)
+
         assign_group.setLayout(assign_layout)
         bottom_layout.addWidget(assign_group)
         # Current status
@@ -640,7 +707,9 @@ Categories=Graphics;Settings;
         try:
             # Get the current cursor position
             index = self.wallpaper_list.currentRow()
-            sorted_wallpapers = sorted(self.wallpapers.items(), key=lambda x: x[1]["title"].lower())
+            sorted_wallpapers = sorted(
+                self.wallpapers.items(), key=lambda x: x[1]["title"].lower()
+            )
             if index >= 0 and index < len(sorted_wallpapers):
                 wallpaper_id, wallpaper_info = sorted_wallpapers[index]
                 self.current_selection = wallpaper_id
@@ -660,9 +729,12 @@ Categories=Graphics;Settings;
                     image.seek(0)
                 image.thumbnail((300, 170), Image.Resampling.LANCZOS)
                 from PySide6.QtGui import QImage, QPixmap
+
                 image = image.convert("RGBA")
                 data = image.tobytes("raw", "RGBA")
-                qimage = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888)
+                qimage = QImage(
+                    data, image.width, image.height, QImage.Format.Format_RGBA8888
+                )
                 pixmap = QPixmap.fromImage(qimage)
                 self.preview_label.setPixmap(pixmap)
                 self.preview_label.setText("")
@@ -670,6 +742,7 @@ Categories=Graphics;Settings;
             except Exception as e:
                 print(f"Error loading preview image: {e}")
                 from PySide6.QtGui import QPixmap
+
                 self.preview_label.setPixmap(QPixmap())
                 self.preview_label.setText("No preview")
         else:
@@ -701,32 +774,44 @@ Categories=Graphics;Settings;
                                     image.seek(0)
                                 image.thumbnail((300, 170), Image.Resampling.LANCZOS)
                                 from PySide6.QtGui import QImage, QPixmap
+
                                 image = image.convert("RGBA")
                                 data = image.tobytes("raw", "RGBA")
-                                qimage = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888)
+                                qimage = QImage(
+                                    data,
+                                    image.width,
+                                    image.height,
+                                    QImage.Format.Format_RGBA8888,
+                                )
                                 pixmap = QPixmap.fromImage(qimage)
                                 self.preview_label.setPixmap(pixmap)
                                 self.preview_label.setText("")
                                 self._preview_photo = pixmap
                             except Exception as e:
                                 print(f"Error loading preview image: {e}")
+                                from PySide6.QtGui import QPixmap
+
                                 self.preview_label.setPixmap(QPixmap())
                                 self.preview_label.setText("No preview")
                         else:
                             from PySide6.QtGui import QPixmap
+
                             self.preview_label.setPixmap(QPixmap())
                             self.preview_label.setText("No preview")
                     else:
                         from PySide6.QtGui import QPixmap
+
                         self.preview_label.setPixmap(QPixmap())
                         self.preview_label.setText("No preview")
                 else:
                     print(f"Error fetching preview from Steam: {resp.status_code}")
                     from PySide6.QtGui import QPixmap
+
                     self.preview_label.setPixmap(QPixmap())
                     self.preview_label.setText("No preview")
             except Exception:
                 from PySide6.QtGui import QPixmap
+
                 self.preview_label.setPixmap(QPixmap())
                 self.preview_label.setText("No preview")
 
@@ -917,7 +1002,7 @@ Categories=Graphics;Settings;
             except Exception:
                 return ""
         # Optionally, strip null bytes and control characters
-        return text.replace('\x00', '').strip()
+        return text.replace("\x00", "").strip()
 
     def update_listboxes(self):
         """Update the wallpaper list in the QListWidget (Qt version)"""
@@ -951,8 +1036,10 @@ Categories=Graphics;Settings;
                 if wallpaper_id and wallpaper_id in self.wallpapers:
                     title = self.wallpapers[wallpaper_id]["title"]
                     # Set the screen name in orange and the title in green
-                    label.setText(f'<span style="color: Green;">{screen}:</span> <span style="color: yellow;">{title}</span>')
-                    
+                    label.setText(
+                        f'<span style="color: Green;">{screen}:</span> <span style="color: yellow;">{title}</span>'
+                    )
+
                 else:
                     label.setText(f"{screen}: Not assigned")
                     label.setStyleSheet("color: red;")
@@ -996,6 +1083,7 @@ Categories=Graphics;Settings;
     def stop_wallpaper_engine(self):
         """Stop the wallpaper engine process"""
         import os
+
         stopped_processes = []
         current_pid = os.getpid()  # PID del proceso actual (python)
         try:
@@ -1152,6 +1240,158 @@ Categories=Graphics;Settings;
         self.update_screen_status()
         # If we reach here, all screens have assigned wallpapers
         self.apply_changes_automatically()
+
+    def load_config_from_script(self):
+        """Read the .sh file to extract the actual config"""
+        if not os.path.exists(self.script_path):
+            return {}
+
+        configs = {}
+        try:
+            with open(self.script_path, "r") as f:
+                content = f.read()
+
+            # Search for the command line
+            if "linux-wallpaperengine" not in content:
+                return {}
+
+            import re
+            # Extraer FPS (Global)
+            fps_match = re.search(r"--fps (\d+)", content)
+            fps = int(fps_match.group(1)) if fps_match else 30
+
+            # Extract Audio (Global)
+            silent = "--silent" in content
+            vol_match = re.search(r"--volume (\d+)", content)
+            volume = int(vol_match.group(1)) if vol_match else 15
+
+            # 
+
+            # Extract config per screen
+            # Search every --screen-root and everything before the next key arg
+            screens = re.findall(r"--screen-root\s+([\w-]+)", content)
+            
+            for screen in screens:
+                # Look for the next text fragment for this screen
+                # (From this screen-root to the next or the final of the line)
+                pattern = rf"--screen-root\s+{screen}.*?--bg\s+[\"']\$WALLPAPER\d+[\"'](.*?)(?=--screen-root|$)"
+                screen_block = re.search(pattern, content, re.DOTALL)
+                block_text = screen_block.group(1) if screen_block else ""
+
+                configs[screen] = {
+                    "fps": fps,
+                    "volume": volume,
+                    "silent": silent,
+                    "scaling": "fill" if "--scaling fill" in block_text else "fit" if "--scaling fit" in block_text else "default",
+                    "clamp": "border" if "--clamp border" in block_text else "clamp" if "--clamp clamp" in block_text else "repeat",
+                    "noautomute": "--noautomute" in content,
+                    "no_audio_proc": "--no-audio-processing" in content,
+                    "mouse": "--disable-mouse" not in content,
+                    "parallax": "--disable-parallax" not in content,
+                    "fs_pause": "--no-fullscreen-pause" not in content
+                }
+            return configs
+        except Exception as e:
+            print(f"Error al leer el script: {e}")
+            return {}
+
+    def config_wallpaper(self, screen_name):
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QSpinBox, 
+                                    QCheckBox, QComboBox, QDialogButtonBox, QGroupBox, QLineEdit)
+        
+        if screen_name not in self.screen_configs:
+            file_configs = self.load_config_from_script()
+            if screen_name in file_configs:
+                self.screen_configs[screen_name] = file_configs[screen_name]
+        defaults = {
+            "fps": 30, "volume": 15, "silent": True, "scaling": "fill",
+            "noautomute": False, "no_audio_proc": False, "clamp": "border",
+            "mouse": True, "parallax": True, "fs_pause": True
+        }
+        cfg = self.screen_configs.get(screen_name, defaults)
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Configuración Avanzada: {screen_name}")
+        main_layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+
+        # --- Audio Section ---
+        audio_group = QGroupBox("Audio")
+        audio_form = QFormLayout(audio_group)
+        vol_spin = QSpinBox(); vol_spin.setRange(0, 100); vol_spin.setValue(cfg["volume"])
+        silent_cb = QCheckBox("Mute (--silent)"); silent_cb.setChecked(cfg["silent"])
+        automute_cb = QCheckBox("Disable Automute"); automute_cb.setChecked(cfg["noautomute"])
+        audio_proc_cb = QCheckBox("Disable Audio Processing"); audio_proc_cb.setChecked(cfg["no_audio_proc"])
+        audio_form.addRow("Volumen:", vol_spin)
+        audio_form.addRow(silent_cb)
+        audio_form.addRow(automute_cb)
+        audio_form.addRow(audio_proc_cb)
+
+        # --- Performance & Behavior Section ---
+        perf_group = QGroupBox("Performance")
+        perf_form = QFormLayout(perf_group)
+        fps_spin = QSpinBox(); fps_spin.setRange(1, 144); fps_spin.setValue(cfg["fps"])
+        mouse_cb = QCheckBox("Enable Mouse Interaction"); mouse_cb.setChecked(cfg["mouse"])
+        parallax_cb = QCheckBox("Enable Parallax"); parallax_cb.setChecked(cfg["parallax"])
+        fs_pause_cb = QCheckBox("Pause on Fullscreen"); fs_pause_cb.setChecked(cfg["fs_pause"])
+        perf_form.addRow("Max FPS:", fps_spin)
+        perf_form.addRow(mouse_cb)
+        perf_form.addRow(parallax_cb)
+        perf_form.addRow(fs_pause_cb)
+
+        # --- Visual Section ---
+        visual_group = QGroupBox("Visual")
+        visual_form = QFormLayout(visual_group)
+        scaling_combo = QComboBox(); scaling_combo.addItems(["fill", "fit", "stretch", "default"])
+        scaling_combo.setCurrentText(cfg["scaling"])
+        clamp_combo = QComboBox(); clamp_combo.addItems(["border", "clamp", "repeat"])
+        clamp_combo.setCurrentText(cfg["clamp"])
+        visual_form.addRow("Scaling:", scaling_combo)
+        visual_form.addRow("Clamping:", clamp_combo)
+
+        main_layout.addWidget(audio_group)
+        main_layout.addWidget(perf_group)
+        main_layout.addWidget(visual_group)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        main_layout.addWidget(buttons)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # 1. Def of GLOBAL and LOCAL keys
+            global_keys = ["fps", "volume", "silent", "noautomute", "no_audio_proc", "fs_pause", "clamp", "mouse", "parallax"]
+            local_keys = ["scaling"]
+
+            # 2. Recopilamos los nuevos valores del diálogo
+            new_config = {
+                "fps": fps_spin.value(),
+                "volume": vol_spin.value(),
+                "silent": silent_cb.isChecked(),
+                "noautomute": automute_cb.isChecked(),
+                "no_audio_proc": audio_proc_cb.isChecked(),
+                "scaling": scaling_combo.currentText(),
+                "clamp": clamp_combo.currentText(),
+                "mouse": mouse_cb.isChecked(),
+                "parallax": parallax_cb.isChecked(),
+                "fs_pause": fs_pause_cb.isChecked()
+            }
+            # 3. Sync: Apply global keys to all the screens
+            for s_name in getattr(self, "detected_screens", []):
+                # If the screen not exist in the dict, we set the default keys
+                if s_name not in self.screen_configs:
+                    self.screen_configs[s_name] = defaults.copy()
+                
+                # Update only for global keys
+                for key in global_keys:
+                    self.screen_configs[s_name][key] = new_config[key]
+
+            # 4. Custom: apply local keys only for the screen
+            for key in local_keys:
+                self.screen_configs[screen_name][key] = new_config[key]
+            
+            # 5. Regen script and apply changes
+            self.apply_changes_automatically()
 
     def unassign_wallpaper(self, screen_name):
         """Unassign the wallpaper from a screen and update the status"""
@@ -1310,16 +1550,35 @@ sleep 5
             # Generate command using only assigned screens
             script_content += "\n# Run wallpaper engine\nlinux-wallpaperengine"
             for i, screen in enumerate(assigned_screens, 1):
-                script_content += f''' \\
-  --scaling fill \\
-  --screen-root {screen} \\
-  --bg "$WALLPAPER{i}"'''
+                cs = self.screen_configs.get(screen, {"scaling": "fill"})
+                script_content += f" --scaling {cs['scaling']} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{i}\" \\\n"
 
             # Add --silent only ONCE at the end
-            script_content += """ \\
-  --silent \\
-  2>&1 | tee -a "$LOG_FILE"
-"""
+            c = self.screen_configs.get(assigned_screens[0], {
+                "fps": 30, "volume": 15, "silent": True,
+                "noautomute": False, "no_audio_proc": False,
+                "mouse": True, "parallax": True, "fs_pause": True, "clamp": "border"
+            })
+            if c['silent']:
+                script_content += " --silent \\\n"
+            else:
+                script_content += f" --volume {c['volume']} \\\n"
+        
+            if c['noautomute']: script_content += " --noautomute \\\n"
+
+            if c['no_audio_proc']: script_content += " --no-audio-processing \\\n"
+
+            if not c['mouse']: script_content += " --disable-mouse \\\n"
+
+            if c['clamp']: script_content += f" --clamp {c['clamp']} \\\n"
+
+            if not c['parallax']: script_content += " --disable-parallax \\\n"
+
+            if not c['fs_pause']: script_content += " --no-fullscreen-pause \\\n"
+
+            script_content += f" --fps {c['fps']} \\\n"
+
+            script_content += '2>&1 | tee -a "$LOG_FILE"\n'
 
             # Write the file
             with open(self.script_path, "w") as f:
@@ -1367,7 +1626,7 @@ sleep 5
                 "Error",
                 f"Error reading script: {e}",
             )
-            
+
     def create_overlays(self):
         """Create persistent per-screen overlay widgets and keep them hidden.
         These persistent windows are more likely to be accepted by Wayland compositors
@@ -1381,7 +1640,9 @@ sleep 5
         # Gather xrandr geometries as a primary source
         geometries = {}
         try:
-            result = subprocess.run(["xrandr", "--query"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["xrandr", "--query"], capture_output=True, text=True
+            )
             for line in result.stdout.splitlines():
                 if " connected" in line:
                     parts = line.split()
@@ -1396,6 +1657,7 @@ sleep 5
             pass
 
         screens = QGuiApplication.screens()
+        assigned_qscreen = None
 
         for idx, screen in enumerate(self.detected_screens):
             # Prefer xrandr geometry, fallback to QScreen lookup
@@ -1443,13 +1705,19 @@ sleep 5
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # If debug env var is set, use a highly visible opaque style for diagnostics
             if os.getenv("WALLPAPER_OVERLAY_DEBUG"):
-                label.setStyleSheet("background:#ff1744;color:white;font-size:36px;padding:30px;border-radius:6px;box-shadow:0 0 0 5px rgba(255,23,68,0.8);")
+                label.setStyleSheet(
+                    "background:#ff1744;color:white;font-size:36px;padding:30px;border-radius:6px;box-shadow:0 0 0 5px rgba(255,23,68,0.8);"
+                )
                 try:
-                    overlay.setStyleSheet("background:rgba(255,23,68,0.95);border:5px solid #ff1744;")
+                    overlay.setStyleSheet(
+                        "background:rgba(255,23,68,0.95);border:5px solid #ff1744;"
+                    )
                 except Exception:
                     pass
             else:
-                label.setStyleSheet("background:#222;color:white;font-size:36px;padding:30px;border-radius:6px;")
+                label.setStyleSheet(
+                    "background:#222;color:white;font-size:36px;padding:30px;border-radius:6px;"
+                )
 
             layout = QVBoxLayout(overlay)
             layout.setContentsMargins(0, 0, 0, 0)
@@ -1487,7 +1755,9 @@ sleep 5
                                     name = s.name()
                                 except Exception:
                                     name = str(sgeom)
-                                print(f"Overlay for {screen}: assigned to QScreen: {name} (geom {sgeom})")
+                                print(
+                                    f"Overlay for {screen}: assigned to QScreen: {name} (geom {sgeom})"
+                                )
                             except Exception as e:
                                 print(f"Overlay setScreen error for {screen}: {e}")
                             break
@@ -1502,8 +1772,8 @@ sleep 5
                 print(f"Overlay windowHandle/setup error for {screen}: {e}")
 
             # Remember the assigned qscreen for later reuse when showing
-            overlay._assigned_qscreen = assigned_qscreen
-            self._screen_overlays[screen] = overlay
+            overlay.setProperty("_assigned_qscreen", assigned_qscreen)
+            self._screen_overlays[screen] = overlay.property("_assigned_qscreen")
 
     def show_overlays(self, duration_ms=2000):
         """Show the persistent overlays for duration_ms milliseconds and hide them."""
@@ -1519,12 +1789,14 @@ sleep 5
             try:
                 # Re-assert assigned screen (some compositors only honor setScreen when mapping)
                 try:
-                    assigned = getattr(overlay, '_assigned_qscreen', None)
+                    assigned = getattr(overlay, "_assigned_qscreen", None)
                     if assigned and overlay.windowHandle():
                         try:
                             overlay.windowHandle().setScreen(assigned)
                         except Exception as e:
-                            print(f"Warning: could not setScreen on show for {screen}: {e}")
+                            print(
+                                f"Warning: could not setScreen on show for {screen}: {e}"
+                            )
                 except Exception:
                     pass
 
@@ -1540,7 +1812,9 @@ sleep 5
                             mapped_screen = handle.screen().name()
                         except Exception:
                             mapped_screen = str(handle.screen().geometry())
-                    print(f"Shown overlay for {screen}: visible={overlay.isVisible()}, mapped_screen={mapped_screen}, geom={overlay.geometry()}")
+                    print(
+                        f"Shown overlay for {screen}: visible={overlay.isVisible()}, mapped_screen={mapped_screen}, geom={overlay.geometry()}"
+                    )
                 except Exception as e:
                     print(f"Overlay diagnostic error for {screen}: {e}")
 
@@ -1587,13 +1861,16 @@ sleep 5
 
                     m = re.search(r"(\d+)x(\d+).*(\+\d+\+\d+)", line)
                     if m:
-                        w = int(m.group(1)); h = int(m.group(2))
+                        w = int(m.group(1))
+                        h = int(m.group(2))
                         pos = re.search(r"(\+\d+\+\d+)", line)
                         if pos:
-                            xy = pos.group(1).lstrip('+').split('+')
-                            x = int(xy[0]); y = int(xy[1])
+                            xy = pos.group(1).lstrip("+").split("+")
+                            x = int(xy[0])
+                            y = int(xy[1])
                         else:
-                            x = 0; y = 0
+                            x = 0
+                            y = 0
                         geometries[name] = (x, y, w, h)
             if geometries:
                 print(f"get_monitor_geometries: using wlr-randr -> {geometries}")
@@ -1603,7 +1880,9 @@ sleep 5
 
         # Try swaymsg
         try:
-            r = subprocess.run(["swaymsg", "-t", "get_outputs"], capture_output=True, text=True)
+            r = subprocess.run(
+                ["swaymsg", "-t", "get_outputs"], capture_output=True, text=True
+            )
             import json
 
             outputs = json.loads(r.stdout)
@@ -1651,7 +1930,9 @@ sleep 5
         geoms = self.get_monitor_geometries()
         if not geoms:
             print("show_monitor_map: no geometries to show")
-            QMessageBox.information(self, "Monitor Map", "No monitor geometry information available.")
+            QMessageBox.information(
+                self, "Monitor Map", "No monitor geometry information available."
+            )
             return
 
         # Create the dialog and widget
@@ -1660,8 +1941,12 @@ sleep 5
                 super().__init__(parent)
                 self.geometries = geometries  # dict name: (x,y,w,h)
                 # compute bounds
-                xs = [x for (x, y, w, h) in geometries.values()] + [x + w for (x, y, w, h) in geometries.values()]
-                ys = [y for (x, y, w, h) in geometries.values()] + [y + h for (x, y, w, h) in geometries.values()]
+                xs = [x for (x, y, w, h) in geometries.values()] + [
+                    x + w for (x, y, w, h) in geometries.values()
+                ]
+                ys = [y for (x, y, w, h) in geometries.values()] + [
+                    y + h for (x, y, w, h) in geometries.values()
+                ]
                 self.min_x = min(xs)
                 self.min_y = min(ys)
                 self.max_x = max(xs)
@@ -1675,20 +1960,23 @@ sleep 5
 
                 # Background gradient
                 grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
-                grad.setColorAt(0.0, QColor(55,55,60))
-                grad.setColorAt(1.0, QColor(35,35,40))
+                grad.setColorAt(0.0, QColor(55, 55, 60))
+                grad.setColorAt(1.0, QColor(35, 35, 40))
                 painter.fillRect(rect, grad)
 
                 total_w = self.max_x - self.min_x
                 total_h = self.max_y - self.min_y
                 if total_w == 0 or total_h == 0:
                     return
-                scale = min((rect.width()-2*self.margin)/total_w, (rect.height()-2*self.margin)/total_h)
+                scale = min(
+                    (rect.width() - 2 * self.margin) / total_w,
+                    (rect.height() - 2 * self.margin) / total_h,
+                )
 
                 # Pens and fonts
-                pen_border = QPen(QColor(200,200,200,180))
+                pen_border = QPen(QColor(200, 200, 200, 180))
                 pen_border.setWidth(2)
-                painter.setFont(QFont('Sans', 10))
+                painter.setFont(QFont("Sans", 10))
 
                 for idx, (name, (x, y, w, h)) in enumerate(self.geometries.items(), 1):
                     sx = int((x - self.min_x) * scale) + self.margin
@@ -1698,52 +1986,58 @@ sleep 5
 
                     # Shadow
                     shadow_color = QColor(0, 0, 0, 100)
-                    painter.setPen(Qt.NoPen)
+                    painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(QBrush(shadow_color))
-                    painter.drawRoundedRect(QRectF(sx+6, sy+6, sw, sh), 8, 8)
+                    painter.drawRoundedRect(QRectF(sx + 6, sy + 6, sw, sh), 8, 8)
 
                     # Monitor fill gradient
-                    mg = QLinearGradient(sx, sy, sx, sy+sh)
-                    if os.getenv('WALLPAPER_OVERLAY_DEBUG'):
-                        mg.setColorAt(0.0, QColor(255,95,95))
-                        mg.setColorAt(1.0, QColor(200,40,40))
+                    mg = QLinearGradient(sx, sy, sx, sy + sh)
+                    if os.getenv("WALLPAPER_OVERLAY_DEBUG"):
+                        mg.setColorAt(0.0, QColor(255, 95, 95))
+                        mg.setColorAt(1.0, QColor(200, 40, 40))
                     else:
-                        mg.setColorAt(0.0, QColor(60,60,65))
-                        mg.setColorAt(1.0, QColor(40,40,45))
+                        mg.setColorAt(0.0, QColor(60, 60, 65))
+                        mg.setColorAt(1.0, QColor(40, 40, 45))
                     painter.setBrush(QBrush(mg))
-                    painter.setPen(Qt.NoPen)
+                    painter.setPen(Qt.PenStyle.NoPen)
                     painter.drawRoundedRect(QRectF(sx, sy, sw, sh), 8, 8)
 
                     # Border
                     painter.setPen(pen_border)
-                    painter.setBrush(Qt.NoBrush)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
                     painter.drawRoundedRect(QRectF(sx, sy, sw, sh), 8, 8)
 
                     # Label band
-                    band_h = min(28, max(18, sh//6))
-                    painter.setPen(Qt.NoPen)
-                    painter.setBrush(QBrush(QColor(0,0,0,140)))
-                    painter.drawRoundedRect(QRectF(sx+6, sy+6, sw-12, band_h), 6, 6)
+                    band_h = min(28, max(18, sh // 6))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(QColor(0, 0, 0, 140)))
+                    painter.drawRoundedRect(
+                        QRectF(sx + 6, sy + 6, sw - 12, band_h), 6, 6
+                    )
 
-                    painter.setPen(QColor(235,235,235))
-                    painter.setFont(QFont('Sans', 10))
-                    painter.drawText(sx+12, sy + band_h - 6, f"{idx}  {name}")
+                    painter.setPen(QColor(235, 235, 235))
+                    painter.setFont(QFont("Sans", 10))
+                    painter.drawText(sx + 12, sy + band_h - 6, f"{idx}  {name}")
 
                     # Index badge
                     badge_r = 18
                     badge_x = sx + sw - badge_r - 10
                     badge_y = sy + 10
-                    painter.setPen(Qt.NoPen)
-                    painter.setBrush(QBrush(QColor(220,80,80)))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(QColor(220, 80, 80)))
                     painter.drawEllipse(QRectF(badge_x, badge_y, badge_r, badge_r))
-                    painter.setPen(QColor(255,255,255))
-                    painter.setFont(QFont('Sans', 9, QFont.Weight.Bold))
-                    painter.drawText(badge_x+5, badge_y+13, str(idx))
+                    painter.setPen(QColor(255, 255, 255))
+                    painter.setFont(QFont("Sans", 9, QFont.Weight.Bold))
+                    painter.drawText(badge_x + 5, badge_y + 13, str(idx))
 
                 # footer hint
-                painter.setPen(QColor(160,160,160))
-                painter.setFont(QFont('Sans', 9))
-                painter.drawText(rect.left()+10, rect.bottom()-10, "Simulation: positions and sizes are approximate")
+                painter.setPen(QColor(160, 160, 160))
+                painter.setFont(QFont("Sans", 9))
+                painter.drawText(
+                    rect.left() + 10,
+                    rect.bottom() - 10,
+                    "Simulation: positions and sizes are approximate",
+                )
 
         # Build dialog
         dlg = QDialog(self)
@@ -1773,12 +2067,14 @@ sleep 5
         if ov:
             try:
                 # Try re-asserting assigned screen
-                assigned = getattr(ov, '_assigned_qscreen', None)
+                assigned = getattr(ov, "_assigned_qscreen", None)
                 if assigned and ov.windowHandle():
                     try:
                         ov.windowHandle().setScreen(assigned)
                     except Exception as e:
-                        print(f"Warning: could not setScreen on single show for {screen_name}: {e}")
+                        print(
+                            f"Warning: could not setScreen on single show for {screen_name}: {e}"
+                        )
                 ov.show()
                 ov.raise_()
                 QApplication.processEvents()
@@ -1790,7 +2086,9 @@ sleep 5
                             mapped = handle.screen().name()
                         except Exception:
                             mapped = str(handle.screen().geometry())
-                    print(f"Single overlay shown for {screen_name}: visible={ov.isVisible()}, mapped_screen={mapped}, geom={ov.geometry()}")
+                    print(
+                        f"Single overlay shown for {screen_name}: visible={ov.isVisible()}, mapped_screen={mapped}, geom={ov.geometry()}"
+                    )
                 except Exception as e:
                     print(f"Diagnostic error for single overlay {screen_name}: {e}")
                 QTimer.singleShot(duration_ms, ov.hide)
@@ -1839,7 +2137,9 @@ sleep 5
         try:
             self.show_overlays(2000)
         except Exception as e:
-            print(f"Fallback: overlays failed with {e}, falling back to transient popups")
+            print(
+                f"Fallback: overlays failed with {e}, falling back to transient popups"
+            )
             # If overlays fail, try the previous transient approach (best-effort)
             try:
                 for idx, screen in enumerate(self.detected_screens):
@@ -1904,7 +2204,14 @@ sleep 5
                 return
 
             # Use PySide6 widgets for the log window
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QCheckBox, QPushButton
+            from PySide6.QtWidgets import (
+                QDialog,
+                QVBoxLayout,
+                QHBoxLayout,
+                QTextEdit,
+                QCheckBox,
+                QPushButton,
+            )
 
             log_window = QDialog(self)
             log_window.setWindowTitle("Wallpaper Engine Logs")
@@ -1916,6 +2223,8 @@ sleep 5
             check_box_layout = QHBoxLayout()
             auto_refresh_check = QCheckBox("Auto-refresh")
             auto_follow_check = QCheckBox("Auto-follow")
+            auto_refresh_check.setChecked(True)
+            auto_follow_check.setChecked(True)
             check_box_layout.addWidget(auto_refresh_check)
             check_box_layout.addWidget(auto_follow_check)
             check_box_layout.addStretch()
@@ -1927,6 +2236,17 @@ sleep 5
             text_edit.setFont(QFont("Monaco", 10))
             layout.addWidget(text_edit)
 
+            # Clear Logs Button
+
+            btnC_layout = QHBoxLayout()
+            clear_btn = QPushButton("Clear Logs")
+            clear_btn.clicked.connect(
+                lambda checked, :self.clear_log()
+            )
+            btnC_layout.addStretch()
+            btnC_layout.addWidget(clear_btn)
+            layout.addLayout(btnC_layout)
+
             # Close button
             btn_layout = QHBoxLayout()
             close_btn = QPushButton("Close")
@@ -1935,7 +2255,7 @@ sleep 5
             btn_layout.addWidget(close_btn)
             layout.addLayout(btn_layout)
 
-            def read_last_lines(file_path, max_bytes=200*1024, max_lines=2000):
+            def read_last_lines(file_path, max_bytes=200 * 1024, max_lines=2000):
                 """Read only the last part of a large file efficiently."""
                 try:
                     with open(file_path, "rb") as f:
@@ -1955,23 +2275,24 @@ sleep 5
                     return f"Error reading log: {e}"
 
             def refresh_log_content():
-                # Evitar acceso si el widget ya fue destruido
-                if not hasattr(text_edit, 'setPlainText') or text_edit is None:
+                # Stop accessing the widget if it was destroyed
+                if not hasattr(text_edit, "setPlainText") or text_edit is None:
                     return
                 try:
                     content = read_last_lines(log_file)
                     text_edit.setPlainText(content)
                     if auto_follow_check.isChecked():
                         from PySide6.QtGui import QTextCursor
+
                         text_edit.moveCursor(QTextCursor.MoveOperation.End)
                 except Exception as e:
-                    # Evitar crash si el widget ya fue destruido
-                    if hasattr(text_edit, 'setPlainText') and text_edit is not None:
+                    # Stop crashing if the widget was already destroyed
+                    if hasattr(text_edit, "setPlainText") and text_edit is not None:
                         try:
                             text_edit.setPlainText(f"Error reading log: {e}")
                         except RuntimeError:
                             pass
-                # Si el diálogo ya fue cerrado, no continuar refrescando
+                # If the widget was destroyed, stop updating it
                 if not log_window.isVisible():
                     return
                 # If auto-refresh is active, call again after 2 seconds
@@ -2002,4 +2323,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(" Process interrupted by user.")
+    except Exception as e:
+        print(f"Error: {e}")

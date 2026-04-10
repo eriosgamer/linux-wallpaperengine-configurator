@@ -1,13 +1,13 @@
 # wallpaper-config
 
-Graphical configurator for Linux-WallpaperEngine, compatible with multi-monitor setups.
+Graphical configurator for [Linux-WallpaperEngine](https://github.com/Almamu/linux-wallpaperengine), compatible with multi-monitor setups.
 Requires the Official Wallpaper Engine installed on Steam and wallpapers downloaded from the Official Wallpaper Engine Workshop. You don't need to run Wallpaper Engine; when installed, it automatically downloads the subscribed wallpapers using Steam.
 
 ## Features
 
 - Automatically detects connected screens (`xrandr`, `wlr-randr`, `swaymsg`).
 - Assign different wallpapers to each screen.
-- Generates a startup script (`start-wallpaperengine.sh`) that adapts to screen changes (physical or remote sessions).
+- Generates a startup script (`start-wallpaperengine.sh`) that adapts to screen changes.
 - Autostart support via `.desktop` file in `~/.config/autostart/`.
 - Preview and details for each wallpaper.
 - Logs accessible from the interface.
@@ -16,12 +16,13 @@ Requires the Official Wallpaper Engine installed on Steam and wallpapers downloa
 
 ## Requirements
 
-- Python 3
-- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`
+- Python 3.11.9
+- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`, `qtdarktheme`
   - `psutil` for system monitoring
   - `PySide6` for the graphical interface
   - `Pillow` for image handling
   - `requests` for network operations
+  - `qtdarktheme` for dark mode
 - Linux Wallpaper Engine installed and available in the PATH (`linux-wallpaperengine`)
   - Can be installed from the [official repository](https://github.com/Almamu/linux-wallpaperengine)
   - Or via the package manager (e.g., `apt`, `dnf`, `pacman`) if available.
@@ -29,7 +30,6 @@ Requires the Official Wallpaper Engine installed on Steam and wallpapers downloa
   
 - Steam and wallpapers downloaded from Official Wallpaper Engine Workshop
 
-All dependencies are installed automatically when running the script.  
 If a dependency is missing, the script will prompt you with the exact `pip install` command.
 
 ## Installation
@@ -39,7 +39,16 @@ If a dependency is missing, the script will prompt you with the exact `pip insta
    git clone https://github.com/eriosgamer/linux-wallpaperengine-configurator.git
    cd linux-wallpaperengine-configurator
    ```
-2. Run the configurator:
+2. Make a virtual enviroment
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Run the configurator:
    ```bash
    python3 wallpaper-config.py
    ```
