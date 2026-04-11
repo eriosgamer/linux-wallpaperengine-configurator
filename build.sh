@@ -1,6 +1,4 @@
-
 #!/bin/bash
-
 
 # Script to compile wallpaper-config.py into a single executable (onefile)
 

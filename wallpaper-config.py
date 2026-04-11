@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import os
 import json
+import os
+import re
+import shutil
 import subprocess
 import sys
-import shutil
-import re
 
 # Force UTF-8
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -50,9 +50,9 @@ def check_and_install_dependencies():
     except Exception:
         pass
     if (
-        not wallpaperengine_path
-        and not wallpaperengine_running
-        and not os.path.exists("/opt/linux-wallpaperengine")
+            not wallpaperengine_path
+            and not wallpaperengine_running
+            and not os.path.exists("/opt/linux-wallpaperengine")
     ):
         print("Error: Linux Wallpaper Engine is not installed or not in PATH.")
         missing_packages.append("linux-wallpaperengine")
@@ -69,7 +69,13 @@ check_and_install_dependencies()
 
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QLineEdit,
     QMainWindow,
+    QSpinBox,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -83,7 +89,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QDialog,  # Added QDialog import
 )
-from PySide6.QtGui import QPixmap, QFont, QLinearGradient, QImage
+from PySide6.QtGui import QPixmap, QFont, QLinearGradient
 from PySide6.QtCore import Qt, QTimer, QRectF
 from PIL import Image
 import psutil
@@ -304,9 +310,9 @@ class WallpaperConfigQt(QMainWindow):
                         if len(parts) >= 2:
                             monitor_name = parts[-1]
                             if (
-                                monitor_name
-                                and not monitor_name.startswith("+")
-                                and monitor_name not in ["Monitors:", ""]
+                                    monitor_name
+                                    and not monitor_name.startswith("+")
+                                    and monitor_name not in ["Monitors:", ""]
                             ):
                                 monitor_name = monitor_name.strip("*+")
                                 if monitor_name and monitor_name not in screens:
@@ -434,7 +440,7 @@ class WallpaperConfigQt(QMainWindow):
                 QMessageBox.information(self, "Logs", "No log file found yet.")
                 return
             open(log_file, "w").close()
-        
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error reading log: {e}")
 
@@ -486,37 +492,58 @@ class WallpaperConfigQt(QMainWindow):
         script_content += 'export PULSE_RUNTIME_PATH="/run/user/$(id -u)/pulse"\n\n'
         script_content += 'echo "$(date): Running with wallpapers:" >> "$LOG_FILE"\n'
         for idx, screen in enumerate(self.detected_screens, 1):
-            
             script_content += f'echo "  {screen}: $WALLPAPER{idx}" >> "$LOG_FILE"\n'
 
         # Build the linux-wallpaperengine command dynamically
         script_content += "\n# Run wallpaper engine\nlinux-wallpaperengine\\\n"
         for idx, (screen, _) in enumerate(assigned, 1):
-            cs = self.screen_configs.get(screen, {"scaling": "fill"})
-            script_content += f" --scaling {cs['scaling']} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{idx}\" \\\n"
+            cs = self.screen_configs.get(screen, {})
+            scaling = cs.get("scaling", "fill")
+            script_content += f" --scaling {scaling} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{idx}\" \\\n"
 
-        c = self.screen_configs.get(self, {
-            "fps": 30, "volume": 15, "silent": True,
-            "noautomute": False, "no_audio_proc": False,
-            "mouse": True, "parallax": True, "fs_pause": True, "clamp": "border"
-        })
+        # Use defaults for global options
+        base_defaults = {
+            "fps": 30,
+            "volume": 15,
+            "silent": True,
+            "noautomute": False,
+            "no_audio_proc": False,
+            "mouse": True,
+            "parallax": True,
+            "fs_pause": True,
+            "clamp": "border",
+        }
+        
+        # Try to get config from the first assigned screen if available
+        if assigned:
+            first_screen = assigned[0][0]
+            c = base_defaults.copy()
+            c.update(self.screen_configs.get(first_screen, {}))
+        else:
+            c = base_defaults
 
-        if c['silent']:
+        if c["silent"]:
             script_content += " --silent \\\n"
         else:
             script_content += f" --volume {c['volume']} \\\n"
-        
-        if c['noautomute']: script_content += " --noautomute \\\n"
 
-        if c['no_audio_proc']: script_content += " --no-audio-processing \\\n"
+        if c["noautomute"]:
+            script_content += " --noautomute \\\n"
 
-        if not c['mouse']: script_content += " --disable-mouse \\\n"
+        if c["no_audio_proc"]:
+            script_content += " --no-audio-processing \\\n"
 
-        if c['clamp']: script_content += f" --clamp {c['clamp']}"
+        if not c["mouse"]:
+            script_content += " --disable-mouse \\\n"
 
-        if not c['parallax']: script_content += " --disable-parallax \\\n"
+        if c.get("clamp"):
+            script_content += f" --clamp {c['clamp']} \\\n"
 
-        if not c['fs_pause']: script_content += " --no-fullscreen-pause \\\n"
+        if not c["parallax"]:
+            script_content += " --disable-parallax \\\n"
+
+        if not c["fs_pause"]:
+            script_content += " --no-fullscreen-pause \\\n"
 
         script_content += f" --fps {c['fps']} \\\n"
 
@@ -686,6 +713,12 @@ Categories=Graphics;Settings;
             )
             assign_layout.addWidget(btn_config, idx, 2)
 
+            btn_properties = QPushButton("Properties")
+            btn_properties.clicked.connect(
+                lambda checked, s=screen: self.wallpaper_property_setup(s)
+            )
+            assign_layout.addWidget(btn_properties, idx, 3)
+
         assign_group.setLayout(assign_layout)
         bottom_layout.addWidget(assign_group)
         # Current status
@@ -825,9 +858,9 @@ Categories=Graphics;Settings;
             if os.path.exists(os.path.join(wallpaper_path, "scene.pkg")):
                 info_text += "\n\nType: Animated Wallpaper"
             elif any(
-                f.endswith((".mp4", ".webm", ".avi"))
-                for f in os.listdir(wallpaper_path)
-                if os.path.isfile(os.path.join(wallpaper_path, f))
+                    f.endswith((".mp4", ".webm", ".avi"))
+                    for f in os.listdir(wallpaper_path)
+                    if os.path.isfile(os.path.join(wallpaper_path, f))
             ):
                 info_text += "\n\nType: Video"
             else:
@@ -871,15 +904,15 @@ Categories=Graphics;Settings;
         # Basic type check
         if wallpaper_type == "scene":
             if not (
-                os.path.exists(os.path.join(wallpaper_path, "scene.json"))
-                or os.path.exists(os.path.join(wallpaper_path, "scene.pkg"))
+                    os.path.exists(os.path.join(wallpaper_path, "scene.json"))
+                    or os.path.exists(os.path.join(wallpaper_path, "scene.pkg"))
             ):
                 return False, "Missing scene.json/scene.pkg"
         elif wallpaper_type == "video":
             if not any(
-                f.endswith(ext)
-                for ext in (".mp4", ".webm", ".avi")
-                for f in os.listdir(wallpaper_path)
+                    f.endswith(ext)
+                    for ext in (".mp4", ".webm", ".avi")
+                    for f in os.listdir(wallpaper_path)
             ):
                 return False, "Missing video file"
         elif wallpaper_type == "web":
@@ -915,8 +948,8 @@ Categories=Graphics;Settings;
                         shader_code = f.read()
                         # Look for common error patterns
                         if (
-                            "cannot convert" in shader_code
-                            or "syntax error" in shader_code
+                                "cannot convert" in shader_code
+                                or "syntax error" in shader_code
                         ):
                             return False, f"Incompatible shader: {fname}"
                 except Exception:
@@ -926,7 +959,7 @@ Categories=Graphics;Settings;
         if "scene.json" in os.listdir(wallpaper_path):
             try:
                 with open(
-                    os.path.join(wallpaper_path, "scene.json"), "r", encoding="utf-8"
+                        os.path.join(wallpaper_path, "scene.json"), "r", encoding="utf-8"
                 ) as f:
                     scene_data = f.read()
                     if "Particle emitter" in scene_data and "origin" not in scene_data:
@@ -939,6 +972,192 @@ Categories=Graphics;Settings;
 
         # If everything is OK
         return True, ""
+
+    def qt_to_we_color(self, color):
+        """Convierte QColor a string 'R.rr,G.gg,B.bb' (0.0 a 1.0) - Sin espacios para evitar errores de shell"""
+        return f"{color.redF():.6f},{color.greenF():.6f},{color.blueF():.6f}"
+
+    def we_to_qt_color(self, we_str):
+        """Convierte string '0.1, 0.2, 0.3' o '0.1 0.2 0.3' a un objeto QColor de Qt"""
+        from PySide6.QtGui import QColor
+        try:
+            # Reemplazar comas por espacios y luego dividir por espacios para manejar ambos formatos
+            clean_str = we_str.replace(",", " ")
+            parts = [float(x) for x in clean_str.split()]
+            if len(parts) >= 3:
+                return QColor.fromRgbF(min(1.0, max(0.0, parts[0])), 
+                                       min(1.0, max(0.0, parts[1])), 
+                                       min(1.0, max(0.0, parts[2])))
+        except:
+            return QColor("white")
+        return QColor("white")
+
+    def wallpaper_property_setup(self, screen):
+        """Open a dialog to configure properties of the assigned wallpaper for a specific screen"""
+        wallpaper_id = self.selected_wallpapers.get(screen)
+        if not wallpaper_id:
+            QMessageBox.warning(self, "No wallpaper assigned",
+                                f"No wallpaper assigned to {screen}. Please assign one first.")
+            return
+
+        wallpaper_info = self.wallpapers.get(wallpaper_id)
+        if not wallpaper_info:
+            QMessageBox.warning(self, "Wallpaper not found", f"Wallpaper info not found for ID: {wallpaper_id}")
+            return
+
+        # Ensure screen_configs entry exists with defaults
+        if screen not in self.screen_configs:
+            file_configs = self.load_config_from_script()
+            if screen in file_configs:
+                self.screen_configs[screen] = file_configs[screen]
+            else:
+                self.screen_configs[screen] = {
+                    "fps": 30,
+                    "volume": 15,
+                    "silent": True,
+                    "scaling": "fill",
+                    "noautomute": False,
+                    "no_audio_proc": False,
+                    "clamp": "border",
+                    "mouse": True,
+                    "parallax": True,
+                    "fs_pause": True,
+                }
+
+        base_properties = self.load_wallpaper_properties(wallpaper_id)
+
+        saved_props = self.screen_configs.get(screen, {}).get("properties", {})
+        if not isinstance(saved_props, dict):
+            saved_props = {}
+
+        # Create a dialog to show properties
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Properties: {wallpaper_info['title']}")
+        layout = QVBoxLayout(dialog)
+        form_layout = QFormLayout()
+
+        property_widgets = {}
+
+        for key, prop in base_properties.items():
+            # Usar el valor guardado si existe, si no, usar el del motor
+            current_val = saved_props.get(key, prop.get("value"))
+            p_type = prop["type"].lower()
+            label_text = prop.get("text", key)  # Usar el texto descriptivo si existe
+
+            if p_type == "boolean":
+                widget = QCheckBox()
+                # El motor devuelve "1" para true o "0" para false a veces
+                widget.setChecked(str(current_val).lower() in ["true", "1"])
+            elif p_type == "int":
+                widget = QSpinBox()
+                widget.setRange(-10000, 10000)
+                widget.setValue(int(float(current_val)))
+            elif p_type == "float":
+                widget = QDoubleSpinBox()
+                widget.setRange(-10000.0, 10000.0)
+                widget.setValue(float(current_val))
+            elif p_type == "color":
+                from PySide6.QtWidgets import QPushButton, QColorDialog
+                from PySide6.QtGui import QColor
+
+                # Botón que actúa como selector y muestra el color
+                color_btn = QPushButton()
+                initial_color = self.we_to_qt_color(str(current_val))
+
+                # Estilo para que el botón tenga el color de fondo
+                def update_btn_style(btn, color):
+                    btn.setStyleSheet(
+                        f"background-color: {color.name()}; border: 1px solid #555; height: 25px;"
+                    )
+
+                update_btn_style(color_btn, initial_color)
+
+                # Guardamos el valor actual en un atributo del widget para leerlo después
+                color_btn.setProperty("we_value", current_val)
+
+                def pick_color():
+                    current = self.we_to_qt_color(color_btn.property("we_value"))
+                    new_color = QColorDialog.getColor(current, self, "Select Color")
+                    if new_color.isValid():
+                        update_btn_style(color_btn, new_color)
+                        color_btn.setProperty("we_value", self.qt_to_we_color(new_color))
+
+                color_btn.clicked.connect(pick_color)
+                widget = color_btn
+            else:
+                widget = QLineEdit(str(current_val))
+
+            form_layout.addRow(label_text, widget)
+            property_widgets[key] = (widget, p_type)
+
+        layout.addLayout(form_layout)
+
+        # Save button
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(dialog.accept)
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_props = {}
+            for key, (widget, p_type) in property_widgets.items():
+                if p_type == "boolean":
+                    val = 1 if widget.isChecked() else 0
+                elif p_type in ["int", "float"]:
+                    val = widget.value()
+                elif p_type == "color":
+                    # Leemos la propiedad que guardamos en el botón
+                    val = widget.property("we_value")
+                else:
+                    val = widget.text()
+                new_props[key] = val
+
+            # Guardar en el diccionario global del configurador
+            if screen not in self.screen_configs:
+                self.screen_configs[screen] = {}
+
+            self.screen_configs[screen]["properties"] = new_props
+
+            # Aplicar cambios al script .sh y reiniciar
+            self.apply_changes_automatically()
+
+    def load_wallpaper_properties(self, wallpaper_id):
+        """Load properties of a specific wallpaper for configuration"""
+        # CMD= linux-wallpaperengine --list-properties wallpaper_id
+        # Execute the command and parse the output
+        try:
+            result = subprocess.run(
+                ["linux-wallpaperengine", "--list-properties", wallpaper_id],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                print(f"Error listing properties for {wallpaper_id}: {result.stderr}")
+                return {}
+
+            properties = {}
+            lines = result.stdout.strip().split("\n")
+            current_key = None
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if " - " in line:
+                    # New property
+                    parts = line.split(" - ", 1)
+                    if len(parts) == 2:
+                        current_key = parts[0].strip()
+                        properties[current_key] = {"type": parts[1].strip()}
+                elif current_key and line.startswith("Text:"):
+                    properties[current_key]["text"] = line.split("Text:", 1)[1].strip()
+                elif current_key and line.startswith("Value:"):
+                    properties[current_key]["value"] = line.split("Value:", 1)[1].strip()
+
+            return properties
+        except Exception as e:
+            print(f"Error loading properties for {wallpaper_id}: {e}")
+            return {}
 
     def load_wallpaper_info(self, wallpaper_id, wallpaper_path):
         """Load info of a specific wallpaper with better encoding handling"""
@@ -1051,8 +1270,8 @@ Categories=Graphics;Settings;
                 try:
                     # Check by process name
                     if (
-                        proc.info["name"]
-                        and "linux-wallpaperengine" in proc.info["name"]
+                            proc.info["name"]
+                            and "linux-wallpaperengine" in proc.info["name"]
                     ):
                         return True
 
@@ -1069,9 +1288,9 @@ Categories=Graphics;Settings;
                             return True
 
                 except (
-                    psutil.NoSuchProcess,
-                    psutil.AccessDenied,
-                    psutil.ZombieProcess,
+                        psutil.NoSuchProcess,
+                        psutil.AccessDenied,
+                        psutil.ZombieProcess,
                 ):
                     continue
 
@@ -1093,8 +1312,8 @@ Categories=Graphics;Settings;
 
                     # Check by name
                     if (
-                        proc.info["name"]
-                        and "linux-wallpaperengine" in proc.info["name"]
+                            proc.info["name"]
+                            and "linux-wallpaperengine" in proc.info["name"]
                     ):
                         process_found = True
 
@@ -1106,9 +1325,9 @@ Categories=Graphics;Settings;
 
                     # Also stop the bash script
                     if (
-                        not process_found
-                        and proc.info["name"] == "bash"
-                        and proc.info["cmdline"]
+                            not process_found
+                            and proc.info["name"] == "bash"
+                            and proc.info["cmdline"]
                     ):
                         cmdline_str = " ".join(proc.info["cmdline"])
                         if "start-wallpaperengine.sh" in cmdline_str:
@@ -1123,9 +1342,9 @@ Categories=Graphics;Settings;
                         stopped_processes.append(proc.info["pid"])
 
                 except (
-                    psutil.NoSuchProcess,
-                    psutil.AccessDenied,
-                    psutil.ZombieProcess,
+                        psutil.NoSuchProcess,
+                        psutil.AccessDenied,
+                        psutil.ZombieProcess,
                 ):
                     continue
 
@@ -1144,9 +1363,9 @@ Categories=Graphics;Settings;
                                 f"Forcing termination of process PID: {proc.info['pid']}"
                             )
                     except (
-                        psutil.NoSuchProcess,
-                        psutil.AccessDenied,
-                        psutil.ZombieProcess,
+                            psutil.NoSuchProcess,
+                            psutil.AccessDenied,
+                            psutil.ZombieProcess,
                     ):
                         continue
 
@@ -1256,6 +1475,7 @@ Categories=Graphics;Settings;
                 return {}
 
             import re
+
             # Extraer FPS (Global)
             fps_match = re.search(r"--fps (\d+)", content)
             fps = int(fps_match.group(1)) if fps_match else 30
@@ -1265,12 +1485,10 @@ Categories=Graphics;Settings;
             vol_match = re.search(r"--volume (\d+)", content)
             volume = int(vol_match.group(1)) if vol_match else 15
 
-            # 
-
             # Extract config per screen
             # Search every --screen-root and everything before the next key arg
             screens = re.findall(r"--screen-root\s+([\w-]+)", content)
-            
+
             for screen in screens:
                 # Look for the next text fragment for this screen
                 # (From this screen-root to the next or the final of the line)
@@ -1278,17 +1496,32 @@ Categories=Graphics;Settings;
                 screen_block = re.search(pattern, content, re.DOTALL)
                 block_text = screen_block.group(1) if screen_block else ""
 
+                # Parse properties
+                props = {}
+                prop_matches = re.findall(r"--set-property\s+([\w.-]+)=([^\s\\]+|'[^']*'|\"[^\"]*\")", block_text)
+                for p_key, p_val in prop_matches:
+                    props[p_key] = p_val.strip("'\"")
+
                 configs[screen] = {
                     "fps": fps,
                     "volume": volume,
                     "silent": silent,
-                    "scaling": "fill" if "--scaling fill" in block_text else "fit" if "--scaling fit" in block_text else "default",
-                    "clamp": "border" if "--clamp border" in block_text else "clamp" if "--clamp clamp" in block_text else "repeat",
+                    "scaling": (
+                        "fill"
+                        if "--scaling fill" in block_text or "--scaling fill" in content
+                        else "fit" if "--scaling fit" in block_text or "--scaling fit" in content else "default"
+                    ),
+                    "clamp": (
+                        "border"
+                        if "--clamp border" in block_text
+                        else "clamp" if "--clamp clamp" in block_text else "repeat"
+                    ),
                     "noautomute": "--noautomute" in content,
                     "no_audio_proc": "--no-audio-processing" in content,
                     "mouse": "--disable-mouse" not in content,
                     "parallax": "--disable-parallax" not in content,
-                    "fs_pause": "--no-fullscreen-pause" not in content
+                    "fs_pause": "--no-fullscreen-pause" not in content,
+                    "properties": props,
                 }
             return configs
         except Exception as e:
@@ -1296,17 +1529,32 @@ Categories=Graphics;Settings;
             return {}
 
     def config_wallpaper(self, screen_name):
-        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QSpinBox, 
-                                    QCheckBox, QComboBox, QDialogButtonBox, QGroupBox, QLineEdit)
-        
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QFormLayout,
+            QSpinBox,
+            QCheckBox,
+            QComboBox,
+            QDialogButtonBox,
+            QGroupBox,
+        )
+
         if screen_name not in self.screen_configs:
             file_configs = self.load_config_from_script()
             if screen_name in file_configs:
                 self.screen_configs[screen_name] = file_configs[screen_name]
         defaults = {
-            "fps": 30, "volume": 15, "silent": True, "scaling": "fill",
-            "noautomute": False, "no_audio_proc": False, "clamp": "border",
-            "mouse": True, "parallax": True, "fs_pause": True
+            "fps": 30,
+            "volume": 15,
+            "silent": True,
+            "scaling": "fill",
+            "noautomute": False,
+            "no_audio_proc": False,
+            "clamp": "border",
+            "mouse": True,
+            "parallax": True,
+            "fs_pause": True,
         }
         cfg = self.screen_configs.get(screen_name, defaults)
 
@@ -1318,10 +1566,15 @@ Categories=Graphics;Settings;
         # --- Audio Section ---
         audio_group = QGroupBox("Audio")
         audio_form = QFormLayout(audio_group)
-        vol_spin = QSpinBox(); vol_spin.setRange(0, 100); vol_spin.setValue(cfg["volume"])
-        silent_cb = QCheckBox("Mute (--silent)"); silent_cb.setChecked(cfg["silent"])
-        automute_cb = QCheckBox("Disable Automute"); automute_cb.setChecked(cfg["noautomute"])
-        audio_proc_cb = QCheckBox("Disable Audio Processing"); audio_proc_cb.setChecked(cfg["no_audio_proc"])
+        vol_spin = QSpinBox()
+        vol_spin.setRange(0, 100)
+        vol_spin.setValue(cfg["volume"])
+        silent_cb = QCheckBox("Mute (--silent)")
+        silent_cb.setChecked(cfg["silent"])
+        automute_cb = QCheckBox("Disable Automute")
+        automute_cb.setChecked(cfg["noautomute"])
+        audio_proc_cb = QCheckBox("Disable Audio Processing")
+        audio_proc_cb.setChecked(cfg["no_audio_proc"])
         audio_form.addRow("Volumen:", vol_spin)
         audio_form.addRow(silent_cb)
         audio_form.addRow(automute_cb)
@@ -1330,10 +1583,15 @@ Categories=Graphics;Settings;
         # --- Performance & Behavior Section ---
         perf_group = QGroupBox("Performance")
         perf_form = QFormLayout(perf_group)
-        fps_spin = QSpinBox(); fps_spin.setRange(1, 144); fps_spin.setValue(cfg["fps"])
-        mouse_cb = QCheckBox("Enable Mouse Interaction"); mouse_cb.setChecked(cfg["mouse"])
-        parallax_cb = QCheckBox("Enable Parallax"); parallax_cb.setChecked(cfg["parallax"])
-        fs_pause_cb = QCheckBox("Pause on Fullscreen"); fs_pause_cb.setChecked(cfg["fs_pause"])
+        fps_spin = QSpinBox()
+        fps_spin.setRange(1, 144)
+        fps_spin.setValue(cfg["fps"])
+        mouse_cb = QCheckBox("Enable Mouse Interaction")
+        mouse_cb.setChecked(cfg["mouse"])
+        parallax_cb = QCheckBox("Enable Parallax")
+        parallax_cb.setChecked(cfg["parallax"])
+        fs_pause_cb = QCheckBox("Pause on Fullscreen")
+        fs_pause_cb.setChecked(cfg["fs_pause"])
         perf_form.addRow("Max FPS:", fps_spin)
         perf_form.addRow(mouse_cb)
         perf_form.addRow(parallax_cb)
@@ -1342,9 +1600,11 @@ Categories=Graphics;Settings;
         # --- Visual Section ---
         visual_group = QGroupBox("Visual")
         visual_form = QFormLayout(visual_group)
-        scaling_combo = QComboBox(); scaling_combo.addItems(["fill", "fit", "stretch", "default"])
+        scaling_combo = QComboBox()
+        scaling_combo.addItems(["fill", "fit", "stretch", "default"])
         scaling_combo.setCurrentText(cfg["scaling"])
-        clamp_combo = QComboBox(); clamp_combo.addItems(["border", "clamp", "repeat"])
+        clamp_combo = QComboBox()
+        clamp_combo.addItems(["border", "clamp", "repeat"])
         clamp_combo.setCurrentText(cfg["clamp"])
         visual_form.addRow("Scaling:", scaling_combo)
         visual_form.addRow("Clamping:", clamp_combo)
@@ -1353,14 +1613,26 @@ Categories=Graphics;Settings;
         main_layout.addWidget(perf_group)
         main_layout.addWidget(visual_group)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         main_layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # 1. Def of GLOBAL and LOCAL keys
-            global_keys = ["fps", "volume", "silent", "noautomute", "no_audio_proc", "fs_pause", "clamp", "mouse", "parallax"]
+            global_keys = [
+                "fps",
+                "volume",
+                "silent",
+                "noautomute",
+                "no_audio_proc",
+                "fs_pause",
+                "clamp",
+                "mouse",
+                "parallax",
+            ]
             local_keys = ["scaling"]
 
             # 2. Recopilamos los nuevos valores del diálogo
@@ -1374,14 +1646,14 @@ Categories=Graphics;Settings;
                 "clamp": clamp_combo.currentText(),
                 "mouse": mouse_cb.isChecked(),
                 "parallax": parallax_cb.isChecked(),
-                "fs_pause": fs_pause_cb.isChecked()
+                "fs_pause": fs_pause_cb.isChecked(),
             }
             # 3. Sync: Apply global keys to all the screens
             for s_name in getattr(self, "detected_screens", []):
                 # If the screen not exist in the dict, we set the default keys
                 if s_name not in self.screen_configs:
                     self.screen_configs[s_name] = defaults.copy()
-                
+
                 # Update only for global keys
                 for key in global_keys:
                     self.screen_configs[s_name][key] = new_config[key]
@@ -1389,7 +1661,7 @@ Categories=Graphics;Settings;
             # 4. Custom: apply local keys only for the screen
             for key in local_keys:
                 self.screen_configs[screen_name][key] = new_config[key]
-            
+
             # 5. Regen script and apply changes
             self.apply_changes_automatically()
 
@@ -1505,21 +1777,21 @@ Categories=Graphics;Settings;
             # Generate full script content
             script_content = f"""#!/bin/bash
 
-# Automatically generated file by wallpaper-config.py
-# Do not edit manually - changes will be overwritten
-# Last updated: $(date)
+            # Automatically generated file by wallpaper-config.py
+            # Do not edit manually - changes will be overwritten
+            # Last updated: $(date)
 
-# Create log file if it doesn't exist
-LOG_FILE="/tmp/wallpaper-engine.log"
-touch "$LOG_FILE"
+            # Create log file if it doesn't exist
+            LOG_FILE="/tmp/wallpaper-engine.log"
+            touch "$LOG_FILE"
 
-echo "$(date): Starting Wallpaper Engine..." >> "$LOG_FILE"
+            echo "$(date): Starting Wallpaper Engine..." >> "$LOG_FILE"
 
-# Wait for the system to be ready
-sleep 5
+            # Wait for the system to be ready
+            sleep 5
 
-# Check that wallpapers exist
-"""
+            # Check that wallpapers exist
+            """
 
             # Add WALLPAPER variables only for assigned screens
             for i, screen in enumerate(assigned_screens, 1):
@@ -1550,38 +1822,71 @@ sleep 5
             # Generate command using only assigned screens
             script_content += "\n# Run wallpaper engine\nlinux-wallpaperengine"
             for i, screen in enumerate(assigned_screens, 1):
-                cs = self.screen_configs.get(screen, {"scaling": "fill"})
-                script_content += f" --scaling {cs['scaling']} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{i}\" \\\n"
+                cs = self.screen_configs.get(screen, {})
+                scaling = cs.get("scaling", "fill")
+                script_content += f" --scaling {scaling} \\\n --screen-root {screen} \\\n --bg \"$WALLPAPER{i}\" \\\n"
+                # If defined, set custom properties for the wallpaper engine
+                if "properties" in cs and isinstance(cs["properties"], dict):
+                    for p_key, p_val in cs["properties"].items():
+                        # Los strings con espacios deben ir entre comillas
+                        if isinstance(p_val, str) and " " in p_val:
+                            script_content += f" --set-property {p_key}=\"{p_val}\" \\\n"
+                        else:
+                            script_content += f" --set-property {p_key}={p_val} \\\n"
 
             # Add --silent only ONCE at the end
-            c = self.screen_configs.get(assigned_screens[0], {
-                "fps": 30, "volume": 15, "silent": True,
-                "noautomute": False, "no_audio_proc": False,
-                "mouse": True, "parallax": True, "fs_pause": True, "clamp": "border"
-            })
-            if c['silent']:
+            base_defaults = {
+                "fps": 30,
+                "volume": 15,
+                "silent": True,
+                "noautomute": False,
+                "no_audio_proc": False,
+                "mouse": True,
+                "parallax": True,
+                "fs_pause": True,
+                "clamp": "border",
+            }
+
+            # 2. Obtenemos la config de la primera pantalla y le inyectamos los defaults
+            # para que nunca falte ninguna llave (KeyError)
+            first_screen = assigned_screens[0]
+            c = base_defaults.copy()
+            c.update(self.screen_configs.get(first_screen, {}))
+
+            # 3. Ahora usamos 'c' con total seguridad
+            if c["silent"]:
                 script_content += " --silent \\\n"
             else:
                 script_content += f" --volume {c['volume']} \\\n"
-        
-            if c['noautomute']: script_content += " --noautomute \\\n"
 
-            if c['no_audio_proc']: script_content += " --no-audio-processing \\\n"
+            if c["noautomute"]:
+                script_content += " --noautomute \\\n"
 
-            if not c['mouse']: script_content += " --disable-mouse \\\n"
+            if c["no_audio_proc"]:
+                script_content += " --no-audio-processing \\\n"
 
-            if c['clamp']: script_content += f" --clamp {c['clamp']} \\\n"
+            if not c["mouse"]:
+                script_content += " --disable-mouse \\\n"
 
-            if not c['parallax']: script_content += " --disable-parallax \\\n"
+            # Aquí es donde fallaba antes si 'clamp' no estaba en el .get()
+            if c.get("clamp"):
+                script_content += f" --clamp {c['clamp']} \\\n"
 
-            if not c['fs_pause']: script_content += " --no-fullscreen-pause \\\n"
+            if not c["parallax"]:
+                script_content += " --disable-parallax \\\n"
+
+            if not c["fs_pause"]:
+                script_content += " --no-fullscreen-pause \\\n"
 
             script_content += f" --fps {c['fps']} \\\n"
 
             script_content += '2>&1 | tee -a "$LOG_FILE"\n'
 
+            print(f"Final script content:\n{script_content}")
+
             # Write the file
             with open(self.script_path, "w") as f:
+
                 f.write(script_content)
 
             # Ensure it's executable
@@ -1682,10 +1987,10 @@ sleep 5
 
             overlay = QDialog(None)
             flags = (
-                Qt.WindowType.Window
-                | Qt.WindowType.FramelessWindowHint
-                | Qt.WindowType.WindowStaysOnTopHint
-                | Qt.WindowType.Tool
+                    Qt.WindowType.Window
+                    | Qt.WindowType.FramelessWindowHint
+                    | Qt.WindowType.WindowStaysOnTopHint
+                    | Qt.WindowType.Tool
             )
             overlay.setWindowFlags(flags)
             # Use an opaque background (more compatible) but keep style consistent
@@ -1701,7 +2006,7 @@ sleep 5
             target_y = y + (h - popup_h) // 2
             overlay.move(target_x, target_y)
 
-            label = QLabel(f"{idx+1}\n{screen}")
+            label = QLabel(f"{idx + 1}\n{screen}")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # If debug env var is set, use a highly visible opaque style for diagnostics
             if os.getenv("WALLPAPER_OVERLAY_DEBUG"):
@@ -1743,10 +2048,10 @@ sleep 5
                     for s in screens:
                         sgeom = s.geometry()
                         if (
-                            target_x >= sgeom.x()
-                            and target_x < sgeom.x() + sgeom.width()
-                            and target_y >= sgeom.y()
-                            and target_y < sgeom.y() + sgeom.height()
+                                target_x >= sgeom.x()
+                                and target_x < sgeom.x() + sgeom.width()
+                                and target_y >= sgeom.y()
+                                and target_y < sgeom.y() + sgeom.height()
                         ):
                             try:
                                 overlay.windowHandle().setScreen(s)
@@ -2143,7 +2448,7 @@ sleep 5
             # If overlays fail, try the previous transient approach (best-effort)
             try:
                 for idx, screen in enumerate(self.detected_screens):
-                    QMessageBox.information(self, "Screen", f"{idx+1} - {screen}")
+                    QMessageBox.information(self, "Screen", f"{idx + 1} - {screen}")
             except Exception as e2:
                 print(f"Fallback fallback failed: {e2}")
 
@@ -2240,9 +2545,7 @@ sleep 5
 
             btnC_layout = QHBoxLayout()
             clear_btn = QPushButton("Clear Logs")
-            clear_btn.clicked.connect(
-                lambda checked, :self.clear_log()
-            )
+            clear_btn.clicked.connect(lambda checked,: self.clear_log())
             btnC_layout.addStretch()
             btnC_layout.addWidget(clear_btn)
             layout.addLayout(btnC_layout)
