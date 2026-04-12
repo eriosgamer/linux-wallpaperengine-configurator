@@ -2,7 +2,7 @@
 Wallpaper Engine Configurator
 </h1>
 
-<img src="https://github.com/user-attachments/assets/67801fde-b48c-465e-a1b1-5c033fcef369" title="Wallpaper Engine Configurator"/>
+<img src="https://github.com/user-attachments/assets/a8a23028-b0c5-4c43-a96d-c3e8ce446f3e" title="Wallpaper Engine Configurator"/>
 
 
 Graphical configurator for [Linux-WallpaperEngine](https://github.com/Almamu/linux-wallpaperengine), compatible with
