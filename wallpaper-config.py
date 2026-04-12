@@ -917,7 +917,11 @@ Categories=Graphics;Settings;
             ):
                 return False, "Missing video file"
         elif wallpaper_type == "web":
-            return False, "Web type not supported"
+            if not (
+                    os.path.exists(os.path.join(wallpaper_path, "scene.json"))
+                    or os.path.exists(os.path.join(wallpaper_path, "scene.pkg"))
+            ):
+                return False, "Missing scene.json/scene.pkg"
         elif not wallpaper_type:
             return False, "No type specified in project.json"
         else:
