@@ -1,4 +1,9 @@
-# wallpaper-config
+<h1 align="center">
+Wallpaper Engine Configurator
+</h1>
+
+<img src="https://github.com/user-attachments/assets/67801fde-b48c-465e-a1b1-5c033fcef369" title="Wallpaper Engine Configurator"/>
+
 
 Graphical configurator for [Linux-WallpaperEngine](https://github.com/Almamu/linux-wallpaperengine), compatible with
 multi-monitor setups.
@@ -64,7 +69,7 @@ Autostart can be enabled or disabled from the configuration menu in the interfac
 
 **Note:**  
 This method works on most Linux desktop environments based on Freedesktop/xdg (GNOME, KDE, XFCE, Cinnamon, MATE, LXDE,
-etc).  
+etc.).  
 It may not work on minimalistic window managers or non-graphical sessions.  
 RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not display.
 
@@ -76,10 +81,11 @@ RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not 
 
 ## Usage
 
-1. Select wallpapers for each screen using the graphical interface (Qt).
-2. Apply changes; the script and configuration are updated automatically.
-3. Optionally, enable/disable autostart from the interface.
-4. Use the "Identify Monitors" button to help locate displays.
+1. Use the "Identify Monitors" button to help locate displays.
+2. Select wallpapers for each screen using the graphical interface.
+3. Apply changes; the script and configuration are updated automatically.
+4. Optionally, enable/disable autostart from the interface.
+
 
     - On X11: the app will attempt to show small overlays on each screen to identify them.
     - On Wayland (Hyprland, Sway, etc.): compositors often restrict windows to the output that contains the application,
