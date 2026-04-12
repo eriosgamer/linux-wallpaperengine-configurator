@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import keyword
 import os
 import re
 import shutil
@@ -514,7 +515,7 @@ class WallpaperConfigQt(QMainWindow):
             "fs_pause": True,
             "clamp": "border",
         }
-        
+
         # Try to get config from the first assigned screen if available
         if assigned:
             first_screen = assigned[0][0]
@@ -990,8 +991,8 @@ Categories=Graphics;Settings;
             clean_str = we_str.replace(",", " ")
             parts = [float(x) for x in clean_str.split()]
             if len(parts) >= 3:
-                return QColor.fromRgbF(min(1.0, max(0.0, parts[0])), 
-                                       min(1.0, max(0.0, parts[1])), 
+                return QColor.fromRgbF(min(1.0, max(0.0, parts[0])),
+                                       min(1.0, max(0.0, parts[1])),
                                        min(1.0, max(0.0, parts[2])))
         except:
             return QColor("white")
@@ -1039,16 +1040,16 @@ Categories=Graphics;Settings;
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Properties: {wallpaper_info['title']}")
         dialog.resize(600, 700)
-        
+
         main_vlayout = QVBoxLayout(dialog)
-        
+
         # Scroll Area Setup
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll_content = QWidget()
         form_layout = QFormLayout(scroll_content)
         scroll.setWidget(scroll_content)
-        
+
         main_vlayout.addWidget(scroll)
 
         property_widgets = {}
@@ -1141,11 +1142,11 @@ Categories=Graphics;Settings;
                     val = widget.property("we_value")
                 else:
                     val = widget.text()
-                
+
                 # Check if it differs from the base (default) value
                 base_val_raw = base_properties[key].get("value")
                 is_changed = False
-                
+
                 if p_type == "boolean":
                     norm_base = 1 if str(base_val_raw).lower() in ["1", "true"] else 0
                     is_changed = (val != norm_base)
@@ -2716,34 +2717,34 @@ Categories=Graphics;Settings;
         """Load properties of a specific wallpaper for configuration"""
         # Execute the command and parse the output
         try:
-            # Crucial for stand-alone binaries (PyInstaller): 
+            # Crucial for stand-alone binaries (PyInstaller):
             # PyInstaller modifies LD_LIBRARY_PATH to point to its internal _MEI folder.
             # We need to restore the original system paths AND add the WE path.
             env = os.environ.copy()
             we_path = "/opt/linux-wallpaperengine"
-            
+
             # 1. Clean LD_LIBRARY_PATH from PyInstaller's influence
             if getattr(sys, 'frozen', False):
                 if 'LD_LIBRARY_PATH_ORIG' in env:
                     env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
                 else:
                     env.pop('LD_LIBRARY_PATH', None)
-            
+
             # 2. Re-construct LD_LIBRARY_PATH carefully
             current_ld = env.get('LD_LIBRARY_PATH', '')
             paths = [
-                we_path, 
-                os.path.join(we_path, "lib"), 
-                '/usr/lib', 
-                '/usr/local/lib', 
-                '/usr/lib/x86_64-linux-gnu', 
+                we_path,
+                os.path.join(we_path, "lib"),
+                '/usr/lib',
+                '/usr/local/lib',
+                '/usr/lib/x86_64-linux-gnu',
                 '/lib/x86_64-linux-gnu'
             ]
             if current_ld:
                 paths.append(current_ld)
-            
+
             env['LD_LIBRARY_PATH'] = ":".join([p for p in paths if os.path.exists(p)])
-            
+
             # Check for the binary in common locations
             binary = os.path.join(we_path, "linux-wallpaperengine")
             if not os.path.exists(binary):
