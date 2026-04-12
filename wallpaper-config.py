@@ -87,7 +87,8 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QMessageBox,
     QGroupBox,
-    QDialog,  # Added QDialog import
+    QDialog,
+    QScrollArea,
 )
 from PySide6.QtGui import QPixmap, QFont, QLinearGradient
 from PySide6.QtCore import Qt, QTimer, QRectF
@@ -1033,13 +1034,32 @@ Categories=Graphics;Settings;
         # Create a dialog to show properties
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Properties: {wallpaper_info['title']}")
-        layout = QVBoxLayout(dialog)
-        form_layout = QFormLayout()
+        dialog.resize(600, 700)
+        
+        main_vlayout = QVBoxLayout(dialog)
+        
+        # Scroll Area Setup
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        form_layout = QFormLayout(scroll_content)
+        scroll.setWidget(scroll_content)
+        
+        main_vlayout.addWidget(scroll)
 
         property_widgets = {}
 
+        def safe_float(val, default=0.0):
+            """Safely convert any value to float, handling 'None' and other issues."""
+            if val is None or str(val).lower() == "none" or str(val).strip() == "":
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+
         for key, prop in base_properties.items():
-            # Usar el valor guardado si existe, si no, usar el del motor
+            # Usar el valor guardado si existe, si no, usar el del motor (base)
             current_val = saved_props.get(key, prop.get("value"))
             p_type = prop["type"].lower()
             label_text = prop.get("text", key)  # Usar el texto descriptivo si existe
@@ -1051,18 +1071,28 @@ Categories=Graphics;Settings;
             elif p_type == "int":
                 widget = QSpinBox()
                 widget.setRange(-10000, 10000)
-                widget.setValue(int(float(current_val)))
+                widget.setValue(int(safe_float(current_val)))
             elif p_type == "float":
                 widget = QDoubleSpinBox()
                 widget.setRange(-10000.0, 10000.0)
-                widget.setValue(float(current_val))
+                widget.setValue(safe_float(current_val))
+            elif p_type == "slider":
+                # Sliders are usually floats in WE
+                widget = QDoubleSpinBox()
+                p_min = safe_float(prop.get("min"), 0.0)
+                p_max = safe_float(prop.get("max"), 100.0)
+                p_step = safe_float(prop.get("step"), 0.1)
+                widget.setRange(p_min, p_max)
+                widget.setSingleStep(p_step)
+                widget.setValue(safe_float(current_val, p_min))
             elif p_type == "color":
                 from PySide6.QtWidgets import QPushButton, QColorDialog
                 from PySide6.QtGui import QColor
 
                 # Botón que actúa como selector y muestra el color
                 color_btn = QPushButton()
-                initial_color = self.we_to_qt_color(str(current_val))
+                initial_color_str = str(current_val) if current_val and str(current_val).lower() != "none" else "1,1,1"
+                initial_color = self.we_to_qt_color(initial_color_str)
 
                 # Estilo para que el botón tenga el color de fondo
                 def update_btn_style(btn, color):
@@ -1073,44 +1103,65 @@ Categories=Graphics;Settings;
                 update_btn_style(color_btn, initial_color)
 
                 # Guardamos el valor actual en un atributo del widget para leerlo después
-                color_btn.setProperty("we_value", current_val)
+                color_btn.setProperty("we_value", initial_color_str)
 
-                def pick_color():
-                    current = self.we_to_qt_color(color_btn.property("we_value"))
+                def pick_color(checked_state, btn_obj):  # Ahora acepta dos argumentos
+                    current = self.we_to_qt_color(btn_obj.property("we_value"))
                     new_color = QColorDialog.getColor(current, self, "Select Color")
                     if new_color.isValid():
-                        update_btn_style(color_btn, new_color)
-                        color_btn.setProperty("we_value", self.qt_to_we_color(new_color))
+                        update_btn_style(btn_obj, new_color)
+                        btn_obj.setProperty("we_value", self.qt_to_we_color(new_color))
 
-                color_btn.clicked.connect(pick_color)
+                color_btn.clicked.connect(lambda checked_state, b=color_btn: pick_color(checked_state, b))
                 widget = color_btn
             else:
-                widget = QLineEdit(str(current_val))
+                widget = QLineEdit(str(current_val) if current_val is not None else "")
 
             form_layout.addRow(label_text, widget)
             property_widgets[key] = (widget, p_type)
-
-        layout.addLayout(form_layout)
 
         # Save button
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(dialog.accept)
         btns.rejected.connect(dialog.reject)
-        layout.addWidget(btns)
+        main_vlayout.addWidget(btns)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_props = {}
             for key, (widget, p_type) in property_widgets.items():
                 if p_type == "boolean":
                     val = 1 if widget.isChecked() else 0
-                elif p_type in ["int", "float"]:
+                elif p_type in ["int", "float", "slider"]:
                     val = widget.value()
                 elif p_type == "color":
-                    # Leemos la propiedad que guardamos en el botón
                     val = widget.property("we_value")
                 else:
                     val = widget.text()
-                new_props[key] = val
+                
+                # Check if it differs from the base (default) value
+                base_val_raw = base_properties[key].get("value")
+                is_changed = False
+                
+                if p_type == "boolean":
+                    norm_base = 1 if str(base_val_raw).lower() in ["1", "true"] else 0
+                    is_changed = (val != norm_base)
+                elif p_type == "int":
+                    try:
+                        is_changed = (int(safe_float(val)) != int(safe_float(base_val_raw)))
+                    except: is_changed = True
+                elif p_type in ["float", "slider"]:
+                    try:
+                        is_changed = abs(safe_float(val) - safe_float(base_val_raw)) > 0.0001
+                    except: is_changed = True
+                elif p_type == "color":
+                    c1 = self.we_to_qt_color(str(val))
+                    c2 = self.we_to_qt_color(str(base_val_raw) if base_val_raw and str(base_val_raw).lower() != 'none' else "1,1,1")
+                    is_changed = (c1 != c2)
+                else:
+                    is_changed = (str(val) != str(base_val_raw))
+
+                if is_changed:
+                    new_props[key] = val
 
             # Guardar en el diccionario global del configurador
             if screen not in self.screen_configs:
@@ -1123,14 +1174,47 @@ Categories=Graphics;Settings;
 
     def load_wallpaper_properties(self, wallpaper_id):
         """Load properties of a specific wallpaper for configuration"""
-        # CMD= linux-wallpaperengine --list-properties wallpaper_id
         # Execute the command and parse the output
         try:
+            # Crucial for stand-alone binaries (PyInstaller):
+            # PyInstaller modifies LD_LIBRARY_PATH to point to its internal _MEI folder.
+            # We need to restore the original system paths AND add the WE path.
+            env = os.environ.copy()
+            we_path = "/opt/linux-wallpaperengine"
+
+            # 1. Clean LD_LIBRARY_PATH from PyInstaller's influence
+            if getattr(sys, 'frozen', False):
+                if 'LD_LIBRARY_PATH_ORIG' in env:
+                    env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
+                else:
+                    env.pop('LD_LIBRARY_PATH', None)
+
+            # 2. Re-construct LD_LIBRARY_PATH carefully
+            current_ld = env.get('LD_LIBRARY_PATH', '')
+            paths = [
+                we_path,
+                os.path.join(we_path, "lib"),
+                '/usr/lib',
+                '/usr/local/lib',
+                '/usr/lib/x86_64-linux-gnu',
+                '/lib/x86_64-linux-gnu'
+            ]
+            if current_ld:
+                paths.append(current_ld)
+
+            env['LD_LIBRARY_PATH'] = ":".join([p for p in paths if os.path.exists(p)])
+
+            # Check for the binary in common locations
+            binary = os.path.join(we_path, "linux-wallpaperengine")
+            if not os.path.exists(binary):
+                binary = "linux-wallpaperengine"
+
             result = subprocess.run(
-                ["linux-wallpaperengine", "--list-properties", wallpaper_id],
+                [binary, "--list-properties", wallpaper_id],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                env=env
             )
             if result.returncode != 0:
                 print(f"Error listing properties for {wallpaper_id}: {result.stderr}")
@@ -1149,10 +1233,17 @@ Categories=Graphics;Settings;
                     if len(parts) == 2:
                         current_key = parts[0].strip()
                         properties[current_key] = {"type": parts[1].strip()}
-                elif current_key and line.startswith("Text:"):
-                    properties[current_key]["text"] = line.split("Text:", 1)[1].strip()
-                elif current_key and line.startswith("Value:"):
-                    properties[current_key]["value"] = line.split("Value:", 1)[1].strip()
+                elif current_key:
+                    if line.startswith("Text:"):
+                        properties[current_key]["text"] = line.split("Text:", 1)[1].strip()
+                    elif line.startswith("Value:"):
+                        properties[current_key]["value"] = line.split("Value:", 1)[1].strip()
+                    elif line.startswith("Min:"):
+                        properties[current_key]["min"] = line.split("Min:", 1)[1].strip()
+                    elif line.startswith("Max:"):
+                        properties[current_key]["max"] = line.split("Max:", 1)[1].strip()
+                    elif line.startswith("Step:"):
+                        properties[current_key]["step"] = line.split("Step:", 1)[1].strip()
 
             return properties
         except Exception as e:
@@ -2296,7 +2387,7 @@ Categories=Graphics;Settings;
                     painter.drawRoundedRect(QRectF(sx + 6, sy + 6, sw, sh), 8, 8)
 
                     # Monitor fill gradient
-                    mg = QLinearGradient(sx, sy, sx, sy + sh)
+                    mg = QLinearGradient(sx, sy, sx, sy + h)
                     if os.getenv("WALLPAPER_OVERLAY_DEBUG"):
                         mg.setColorAt(0.0, QColor(255, 95, 95))
                         mg.setColorAt(1.0, QColor(200, 40, 40))
@@ -2616,6 +2707,84 @@ Categories=Graphics;Settings;
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error reading log: {e}")
+
+    def load_wallpaper_properties(self, wallpaper_id):
+        """Load properties of a specific wallpaper for configuration"""
+        # Execute the command and parse the output
+        try:
+            # Crucial for stand-alone binaries (PyInstaller): 
+            # PyInstaller modifies LD_LIBRARY_PATH to point to its internal _MEI folder.
+            # We need to restore the original system paths AND add the WE path.
+            env = os.environ.copy()
+            we_path = "/opt/linux-wallpaperengine"
+            
+            # 1. Clean LD_LIBRARY_PATH from PyInstaller's influence
+            if getattr(sys, 'frozen', False):
+                if 'LD_LIBRARY_PATH_ORIG' in env:
+                    env['LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH_ORIG']
+                else:
+                    env.pop('LD_LIBRARY_PATH', None)
+            
+            # 2. Re-construct LD_LIBRARY_PATH carefully
+            current_ld = env.get('LD_LIBRARY_PATH', '')
+            paths = [
+                we_path, 
+                os.path.join(we_path, "lib"), 
+                '/usr/lib', 
+                '/usr/local/lib', 
+                '/usr/lib/x86_64-linux-gnu', 
+                '/lib/x86_64-linux-gnu'
+            ]
+            if current_ld:
+                paths.append(current_ld)
+            
+            env['LD_LIBRARY_PATH'] = ":".join([p for p in paths if os.path.exists(p)])
+            
+            # Check for the binary in common locations
+            binary = os.path.join(we_path, "linux-wallpaperengine")
+            if not os.path.exists(binary):
+                binary = "linux-wallpaperengine"
+
+            result = subprocess.run(
+                [binary, "--list-properties", wallpaper_id],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=env
+            )
+            if result.returncode != 0:
+                print(f"Error listing properties for {wallpaper_id}: {result.stderr}")
+                return {}
+
+            properties = {}
+            lines = result.stdout.strip().split("\n")
+            current_key = None
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if " - " in line:
+                    # New property
+                    parts = line.split(" - ", 1)
+                    if len(parts) == 2:
+                        current_key = parts[0].strip()
+                        properties[current_key] = {"type": parts[1].strip()}
+                elif current_key:
+                    if line.startswith("Text:"):
+                        properties[current_key]["text"] = line.split("Text:", 1)[1].strip()
+                    elif line.startswith("Value:"):
+                        properties[current_key]["value"] = line.split("Value:", 1)[1].strip()
+                    elif line.startswith("Min:"):
+                        properties[current_key]["min"] = line.split("Min:", 1)[1].strip()
+                    elif line.startswith("Max:"):
+                        properties[current_key]["max"] = line.split("Max:", 1)[1].strip()
+                    elif line.startswith("Step:"):
+                        properties[current_key]["step"] = line.split("Step:", 1)[1].strip()
+
+            return properties
+        except Exception as e:
+            print(f"Error loading properties for {wallpaper_id}: {e}")
+            return {}
 
 
 def main():
