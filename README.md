@@ -58,7 +58,7 @@ If a dependency is missing, the script will prompt you with the exact `pip insta
    ```
 4. Run the configurator:
    ```bash
-   python3 wallpaper-config.py
+   python3 WallpaperEngineConfigurator.py
    ```
 
 ## Autostart

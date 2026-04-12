@@ -3,8 +3,8 @@
 # Exit on error
 set -e
 
-APP_NAME="wallpaper-configurator"
-BINARY_NAME="wallpaper-config"
+APP_NAME="WallpaperEngineConfigurator"
+BINARY_NAME="WallpaperEngineConfigurator"
 BUILD_SCRIPT="./build.sh"
 DIST_DIR="dist"
 INSTALL_BIN_DIR="$HOME/.local/bin"
@@ -32,7 +32,7 @@ mkdir -p "$INSTALL_ICONS_DIR"
 echo "Updating application icon..."
 # We remove the old icon to ensure a clean extraction
 rm -f "$INSTALL_ICONS_DIR/$ICON_NAME.png"
-grep "icon_base64 =" wallpaper-config.py | cut -d'"' -f2 | base64 -d > "$INSTALL_ICONS_DIR/$ICON_NAME.png" || echo "Warning: Could not extract icon."
+grep "icon_base64 =" Files/icon_file.py | cut -d'"' -f2 | base64 -d > "$INSTALL_ICONS_DIR/$ICON_NAME.png" || echo "Warning: Could not extract icon."
 
 # 4. Copy/Update the binary
 if [ -f "$DIST_DIR/$BINARY_NAME" ]; then

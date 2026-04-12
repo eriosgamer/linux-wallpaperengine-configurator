@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Script to compile wallpaper-config.py into a single executable (onefile)
+# Script to compile WallpaperEngineConfigurator.py into a single executable (onefile)
 
 set -e
 
-MAIN_SCRIPT="wallpaper-config.py"
+MAIN_SCRIPT="WallpaperEngineConfigurator.py"
 DIST_DIR="dist"
 
 # Install PyInstaller if not present
