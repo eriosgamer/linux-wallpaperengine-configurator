@@ -4,114 +4,75 @@ Wallpaper Engine Configurator
 
 <img src="https://github.com/user-attachments/assets/a8a23028-b0c5-4c43-a96d-c3e8ce446f3e" title="Wallpaper Engine Configurator"/>
 
-
-Graphical configurator for [Linux-WallpaperEngine](https://github.com/Almamu/linux-wallpaperengine), compatible with
-multi-monitor setups.
-Requires the Official Wallpaper Engine installed on Steam and wallpapers downloaded from the Official Wallpaper Engine
-Workshop. You don't need to run Wallpaper Engine; when installed, it automatically downloads the subscribed wallpapers
-using Steam.
+Graphical configurator for [Linux-WallpaperEngine](https://github.com/Almamu/linux-wallpaperengine), compatible with multi-monitor setups.
+It requires the Official Wallpaper Engine installed on Steam and wallpapers downloaded from the Steam Workshop.
 
 ## Features
 
-- Automatically detects connected screens (`xrandr`, `wlr-randr`, `swaymsg`).
-- Assign different wallpapers to each screen.
-- Generates a startup script (`start-wallpaperengine.sh`) that adapts to screen changes.
-- Autostart support via `.desktop` file in `~/.config/autostart/`.
-- Preview and details for each wallpaper.
-- Logs accessible from the interface.
-- **Modern Qt interface using PySide6.**
-- Uses PySide6 for the graphical interface (no Tkinter required).
+- **Multi-Monitor Support**: Automatically detects connected screens via `xrandr`, `wlr-randr`, or `swaymsg`.
+- **Per-Screen Assignment**: Assign different wallpapers to each monitor independently.
+- **Advanced Configuration**: Adjust FPS, volume, mute, scaling, and more for each individual screen.
+- **Wallpaper Properties**: Support for user-configurable properties (customize colors, sliders, and checkboxes of your wallpapers).
+- **Startup Script Generation**: Creates a robust `start-wallpaperengine.sh` that adapts to screen changes.
+- **Autostart Support**: Easily enable/disable autostart via a `.desktop` entry.
+- **Preview & Details**: View wallpaper previews and metadata directly in the app.
+- **Modern UI**: Built with PySide6 (Qt) featuring a built-in Light/Dark theme toggle.
+- **Standalone Installation**: Includes scripts to build and install the app as a system-wide executable.
 
 ## Requirements
 
-- Python 3.11.9
-- Dependencies: `psutil`, `PySide6`, `Pillow`, `requests`, `qtdarktheme`
-    - `psutil` for system monitoring
-    - `PySide6` for the graphical interface
-    - `Pillow` for image handling
-    - `requests` for network operations
-    - `qtdarktheme` for dark mode
-- Linux Wallpaper Engine installed and available in the PATH (`linux-wallpaperengine`)
-    - Can be installed from the [official repository](https://github.com/Almamu/linux-wallpaperengine)
-    - Or via the package manager (e.g., `apt`, `dnf`, `pacman`) if available.
-- `xrandr`, `wlr-randr`, or `swaymsg` for screen detection
-
-- Steam and wallpapers downloaded from Official Wallpaper Engine Workshop
-
-If a dependency is missing, the script will prompt you with the exact `pip install` command.
+- **Python 3.11+**
+- **Dependencies**: `psutil`, `PySide6`, `Pillow`, `requests`, `pyqtdarktheme`
+- **Linux Wallpaper Engine**: Must be installed and available in your PATH (`linux-wallpaperengine`).
+- **Screen Tools**: `xrandr` (X11), `wlr-randr` or `swaymsg` (Wayland).
+- **Steam**: Official Wallpaper Engine and subscribed wallpapers.
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/eriosgamer/linux-wallpaperengine-configurator.git
-   cd linux-wallpaperengine-configurator
-   ```
-2. Make a virtual enviroment
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Run the configurator:
-   ```bash
-   python3 WallpaperEngineConfigurator.py
-   ```
+### 1. Clone the repository
+```bash
+git clone https://github.com/eriosgamer/linux-wallpaperengine-configurator.git
+cd linux-wallpaperengine-configurator
+```
 
-## Autostart
+### 2. Setup environment (Recommended)
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-The application creates a `.desktop` file in `~/.config/autostart/` to automatically start the script when a graphical
-session begins.  
-Autostart can be enabled or disabled from the configuration menu in the interface.
+### 3. Run or Install
+You can run the script directly:
+```bash
+python3 WallpaperEngineConfigurator.py
+```
+Or install it permanently (this will compile a standalone binary and add it to your applications menu):
+```bash
+./install.sh
+```
 
-**Note:**  
-This method works on most Linux desktop environments based on Freedesktop/xdg (GNOME, KDE, XFCE, Cinnamon, MATE, LXDE,
-etc.).  
-It may not work on minimalistic window managers or non-graphical sessions.  
-RDP sessions (xrdp) do not support showing the wallpaper; it loads but does not display.
+## Screen Compatibility & Identification
 
-## Screen Compatibility
-
-- The generated script automatically updates according to the screens detected in each session.
-- If you change session (e.g., from xrdp to physical), the script adapts to the new environment when you apply changes
-  from the interface.
+- **X11**: Displays small overlays on each screen to identify them.
+- **Wayland (Hyprland, Sway, etc.)**: Uses a **Monitor Map** simulation showing monitor positions and sizes, as compositors often restrict window placement.
+- Use the **Identify Monitors** button in the UI to help locate your displays.
 
 ## Usage
 
-1. Use the "Identify Monitors" button to help locate displays.
-2. Select wallpapers for each screen using the graphical interface.
-3. Apply changes; the script and configuration are updated automatically.
-4. Optionally, enable/disable autostart from the interface.
-
-
-    - On X11: the app will attempt to show small overlays on each screen to identify them.
-    - On Wayland (Hyprland, Sway, etc.): compositors often restrict windows to the output that contains the application,
-      so the tool opens a **Monitor Map** simulation showing each monitor's position and size instead.
-    - For diagnostics and higher visibility, set the environment variable `WALLPAPER_OVERLAY_DEBUG=1` before launching
-      the app, for example:
-      ```bash
-      WALLPAPER_OVERLAY_DEBUG=1 python3 wallpaper-config.py
-      ```
-    - Note: per-screen "Identify" buttons were removed from the UI to avoid confusion; use the Monitor Map or move the
-      app to the target monitor and then use "Identify Monitors" to display overlays on that output when possible.
+1. Use **Identify Monitors** to see your screen layout.
+2. Select a wallpaper from the list.
+3. Click on the screen button (e.g., `>> HDMI-A-1`) to assign it.
+4. Use **Config** for performance settings (FPS, etc.) or **Properties** to customize the wallpaper appearance.
+5. Enable **Autostart** if you want the wallpapers to load on login.
 
 ## Logs and Support
 
-- Logs are saved in `/tmp/wallpaper-engine.log` and can be viewed from the interface.
-- If you encounter issues, check the logs and ensure all dependencies are installed.
+Logs are saved in `/tmp/wallpaper-engine.log` and can be viewed directly from the interface using the **View Logs** button.
 
 ## License
 
 This project is licensed under the Creative Commons BY-NC-ND License. See the [LICENSE](LICENSE) file for details.
 
-**Warning:**  
-The project overwrites the startup script every time changes are applied. Do not manually edit the
-`start-wallpaperengine.sh` file.
-
 ---
-
-**Author:**  
-eriosgamer
+**Author:** eriosgamer
