@@ -125,7 +125,7 @@ def create_wallpaper_script(self):
 def get_script_path(self):
     """Get the wallpaper engine script path"""
     # Create .local/bin directory if it doesn't exist
-    bin_dir = f"~/.local/bin"
+    bin_dir = os.path.expanduser("~/.local/bin")
     os.makedirs(bin_dir, exist_ok=True)
     return os.path.join(bin_dir, "start-wallpaperengine.sh")
 
