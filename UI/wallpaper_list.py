@@ -1,10 +1,50 @@
 import os
+import signal
+import subprocess
 
 from PIL import Image
 
+def kill_preview_process(self):
+    proc = getattr(self, '_preview_process', None)
+    if proc is None:
+        return
+    if proc.poll() is not None:
+        self._preview_process = None
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        proc.wait(timeout=2)
+    except Exception:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait(timeout=1)
+        except Exception:
+            pass
+    self._preview_process = None
+
+def on_preview_click(self, event):
+    if not self.current_selection:
+        return
+
+    kill_preview_process(self)
+
+    wallpaper_id = self.current_selection
+
+    try:
+        self._preview_process = subprocess.Popen(
+            ["linux-wallpaperengine", "--silent", "--fps", "15", wallpaper_id],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        print(f"Live preview started for wallpaper {wallpaper_id}")
+    except Exception as e:
+        print(f"Error starting live preview: {e}")
+
 def on_wallpaper_select(self):
     """Handle wallpaper selection in the list (Text widget version)"""
-    # Get the index of the current selection in the Text widget
+    kill_preview_process(self)
+
     try:
         # Get the current cursor position
         index = self.wallpaper_list.currentRow()
@@ -142,6 +182,18 @@ def on_wallpaper_select(self):
         if len(description) > 200:
             description = description[:200] + "..."
         info_text += f"\n\nDescription:\n{description}"
+
+    if hasattr(self, 'btn_open_location'):
+        self.btn_open_location.setEnabled(True)
+
+def on_open_location(self):
+    if not self.current_selection:
+        return
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QDesktopServices
+    wallpaper_path = self.wallpapers[self.current_selection]["path"]
+    QDesktopServices.openUrl(QUrl.fromLocalFile(wallpaper_path))
+    print(f"Opened wallpaper location: {wallpaper_path}")
 
     # Use the method to update text
     from UI.user_interface import update_info_text

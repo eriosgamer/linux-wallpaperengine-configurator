@@ -57,9 +57,15 @@ class WallpaperConfigQt(QMainWindow):
         # Main UI
         qdarktheme.setup_theme("dark")
         set_icon_file(self)
+        self._preview_process = None
         setup_ui(self)
         load_wallpapers(self)
         ensure_required_files(self)
+
+    def closeEvent(self, event):
+        from UI.wallpaper_list import kill_preview_process
+        kill_preview_process(self)
+        super().closeEvent(event)
 
 def main():
     # Force UTF-8

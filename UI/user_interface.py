@@ -188,10 +188,19 @@ def setup_ui(self):
     self.preview_label = QLabel("Select a wallpaper")
     self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self.preview_label.setFixedSize(320, 180)
+    self.preview_label.setCursor(Qt.CursorShape.PointingHandCursor)
+    self.preview_label.setToolTip("Click to launch live preview window")
+    from UI.wallpaper_list import on_preview_click
+    self.preview_label.mousePressEvent = lambda event: on_preview_click(self, event)
     right_panel.addWidget(self.preview_label)
     self.info_text = QTextEdit()
     self.info_text.setReadOnly(True)
     right_panel.addWidget(self.info_text)
+    self.btn_open_location = QPushButton("Open Wallpaper Location")
+    self.btn_open_location.setEnabled(False)
+    from UI.wallpaper_list import on_open_location
+    self.btn_open_location.clicked.connect(lambda: on_open_location(self))
+    right_panel.addWidget(self.btn_open_location)
     content_layout.addLayout(right_panel, 1)
     main_layout.addLayout(content_layout)
 
