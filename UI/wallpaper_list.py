@@ -186,6 +186,9 @@ def on_wallpaper_select(self):
     if hasattr(self, 'btn_open_location'):
         self.btn_open_location.setEnabled(True)
 
+    from UI.user_interface import update_info_text
+    update_info_text(self, info_text)
+
 def on_open_location(self):
     if not self.current_selection:
         return
@@ -194,7 +197,3 @@ def on_open_location(self):
     wallpaper_path = self.wallpapers[self.current_selection]["path"]
     QDesktopServices.openUrl(QUrl.fromLocalFile(wallpaper_path))
     print(f"Opened wallpaper location: {wallpaper_path}")
-
-    # Use the method to update text
-    from UI.user_interface import update_info_text
-    update_info_text(self, info_text)
